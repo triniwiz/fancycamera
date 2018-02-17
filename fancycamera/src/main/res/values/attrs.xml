@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="FancyCamera">
+        <attr name="enableFlash" format="boolean"/>
+        <attr name="saveToGallery" format="boolean"/>
+        <attr name="quality" format="enum">
+            <enum name="max480p" value="0" />
+            <enum name="max720p" value="1" />
+            <enum name="max1080p" value="2" />
+            <enum name="max2160p" value="3" />
+            <enum name="highest" value="4" />
+            <enum name="lowest" value="5" />
+            <enum name="qvga" value="6" />
+        </attr>
+        <attr name="cameraPosition" format="enum">
+            <enum name="back" value="0" />
+            <enum name="front" value="1" />
+        </attr>
+    </declare-styleable>
+</resources>

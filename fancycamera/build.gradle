@@ -1,0 +1,45 @@
+apply plugin: 'com.android.library'
+
+ext {
+    PUBLISH_GROUP_ID = 'co.fitcom'
+    PUBLISH_ARTIFACT_ID = 'fancycamera'
+    PUBLISH_VERSION = '0.0.1'
+}
+
+
+android {
+    compileSdkVersion COMPILE_SDK_VERSION as int
+    buildToolsVersion BUILD_TOOLS_VERSION as String
+
+    defaultConfig {
+        minSdkVersion 17
+        targetSdkVersion COMPILE_SDK_VERSION as int
+        versionCode 1
+        versionName "1.0"
+
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.jar'])
+
+    implementation 'com.android.support:appcompat-v7:27.0.2'
+    testImplementation 'junit:junit:4.12'
+    androidTestImplementation 'com.android.support.test:runner:1.0.1'
+    androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
+}
+
+boolean upload2maven = project.rootProject.hasProperty("for.upload") ? project.rootProject.property("for.upload") : "false"
+if (upload2maven) {
+    apply from: 'android-release-aar.gradle'
+}
