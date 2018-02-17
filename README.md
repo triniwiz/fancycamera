@@ -39,7 +39,7 @@ compile 'co.fitcom:fancycamera:0.0.1'
 | toggleCamera()          |         | void    | Toggles between front or the back camera.             |
 | getDuration()           |         | int     | Get the current recording video duration.             |
 | hasCamera()             |         | boolean | Checks if there are any camera available.             |
-| setCameraPosition()     |         | void    | Initiates the download manager                        |
+| setCameraPosition()     |         | void    | Sets camera position front/back                       |
 
 # TODO
 
