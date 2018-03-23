@@ -221,7 +221,13 @@ class Camera2 extends CameraBase {
                     public void onOpened(@NonNull CameraDevice camera) {
                         mCameraDevice = camera;
                         if (getHolder() != null) {
-                            configureTransform(getHolder().getWidth(), getHolder().getHeight());
+                            Handler mainHandler = new Handler(mContext.getMainLooper());
+                            mainHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    configureTransform(getHolder().getWidth(), getHolder().getHeight());
+                                }
+                            });
                         }
                         startPreview();
                         semaphore.release();
@@ -508,6 +514,9 @@ class Camera2 extends CameraBase {
                     @Override
                     public void run() {
                         synchronized (lock) {
+                            if(!isRecording){
+                                return;
+                            }
                             mMediaRecorder.stop();
                             isRecording = false;
                             stopDurationTimer();
