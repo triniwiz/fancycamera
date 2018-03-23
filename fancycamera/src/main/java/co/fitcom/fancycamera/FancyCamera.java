@@ -148,8 +148,9 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-        requestPermission();
-        if(!hasPermission()) return;
+        if(!hasPermission()){
+            requestPermission();
+        }
         cameraBase.openCamera(width,height);
     }
 
