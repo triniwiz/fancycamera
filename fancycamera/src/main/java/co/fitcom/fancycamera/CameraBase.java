@@ -22,31 +22,39 @@ public abstract class CameraBase {
     private File mFile;
     CameraEventListener listener;
     int quality;
-    CameraBase(TextureView holder){
+
+    CameraBase(TextureView holder) {
         this.holder = holder;
     }
+
     public static String CameraThread = "CameraThread";
     public static String CameraRecorderThread = "CameraRecorderThread";
-    public  static String PreviewThread = "PreviewThread";
-    public  static String sessionThread = "SessionThread";
-    public TextureView getHolder(){
+    public static String PreviewThread = "PreviewThread";
+    public static String sessionThread = "SessionThread";
+
+    public TextureView getHolder() {
         return holder;
     }
-    void setFile(File file){
+
+    void setFile(File file) {
         mFile = file;
     }
-    File getFile(){
+
+    File getFile() {
         return mFile;
     }
-    void setQuality(int quality){
+
+    void setQuality(int quality) {
         this.quality = quality;
     }
-    int getQuality(){
-        return  quality;
+
+    int getQuality() {
+        return quality;
     }
+
     abstract boolean hasCamera();
 
-    abstract void openCamera(int width,int height);
+    abstract void openCamera(int width, int height);
 
     abstract void start();
 
@@ -62,11 +70,11 @@ public abstract class CameraBase {
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
 
-    public CameraEventListener getListener(){
+    public CameraEventListener getListener() {
         return listener;
     }
 
-    public void setListener(CameraEventListener listener){
+    public void setListener(CameraEventListener listener) {
         this.listener = listener;
     }
 
