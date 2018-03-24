@@ -156,7 +156,7 @@ public class Camera1  extends CameraBase{
             @Override
             public void run() {
                 try {
-                    setPermit(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+                    setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
                     if (getPermit()) {
                         mCamera.reconnect();
                         mCamera.setPreviewTexture(getHolder().getSurfaceTexture());
