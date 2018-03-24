@@ -8,8 +8,8 @@
     android:orientation="vertical">
 
     <co.fitcom.fancycamera.FancyCamera
-        app:cameraPosition="back"
-        app:quality="max1080p"
+        app:cameraPosition="front"
+        app:quality="max2160p"
         android:id="@+id/holder"
         android:layout_width="match_parent"
         android:layout_height="300dp"

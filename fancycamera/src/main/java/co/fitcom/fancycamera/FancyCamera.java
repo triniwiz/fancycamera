@@ -60,7 +60,9 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
                 mFlashEnabled = a.getBoolean(R.styleable.FancyCamera_enableFlash, false);
                 mSaveToGallery = a.getBoolean(R.styleable.FancyCamera_saveToGallery, false);
                 mQuality = a.getInteger(R.styleable.FancyCamera_quality, Quality.MAX_480P.getValue());
+                setQuality(mQuality);
                 mCameraPosition = a.getInteger(R.styleable.FancyCamera_cameraPosition, 0);
+                cameraBase.setCameraPosition(CameraPosition.values()[mCameraPosition]);
             } finally {
                 a.recycle();
             }
@@ -126,6 +128,9 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     public boolean hasPermission() {
+        if(Build.VERSION.SDK_INT > 23){
+            return true;
+        }
         return Build.VERSION.SDK_INT < 23 || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) == (PackageManager.PERMISSION_GRANTED) && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == (PackageManager.PERMISSION_GRANTED);
     }
 
@@ -150,6 +155,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
         if(!hasPermission()){
             requestPermission();
+            return;
         }
         cameraBase.openCamera(width,height);
     }

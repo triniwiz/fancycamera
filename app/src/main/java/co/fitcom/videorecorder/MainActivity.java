@@ -1,9 +1,11 @@
 package co.fitcom.videorecorder;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.VideoView;
@@ -17,7 +19,7 @@ import co.fitcom.fancycamera.FancyCamera;
 import co.fitcom.fancycamera.PhotoEvent;
 import co.fitcom.fancycamera.VideoEvent;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
     FancyCamera cameraView;
     VideoView videoPlayer;
     TextView durationView;
@@ -30,7 +32,7 @@ public class MainActivity extends Activity {
         videoPlayer = findViewById(R.id.videoPlayer);
         durationView = findViewById(R.id.durationView);
         cameraView = findViewById(R.id.holder);
-        cameraView.setQuality(FancyCamera.Quality.HIGHEST.getValue());
+        cameraView.setQuality(2);
         cameraView.setListener(new CameraEventListenerUI(){
             @Override
             public void onPhotoEventUI(PhotoEvent event) {
@@ -60,6 +62,8 @@ public class MainActivity extends Activity {
                     };
                     timer.schedule(timerTask, 0, 1000);
 
+                }else{
+                    System.out.println(event.getMessage());
                 }
             }
 
@@ -98,4 +102,5 @@ public class MainActivity extends Activity {
             cameraView.start();
         }
     }
+
 }

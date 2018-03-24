@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 
 public class Camera1  extends CameraBase{
     private Semaphore semaphore = new Semaphore(1);
+    private final Object lock = new Object();
     private Camera mCamera;
     private Context mContext;
     private FancyCamera.CameraPosition mPosition;
@@ -101,13 +102,14 @@ public class Camera1  extends CameraBase{
     @Override
     void openCamera(int width,int height) {
         try {
-            setPermit(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+            setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     try {
                         if (getPermit()) {
                             mCamera = Camera.open(mPosition.getValue());
+                            updatePreview();
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -156,7 +158,7 @@ public class Camera1  extends CameraBase{
             public void run() {
                 if (getHolder().isAvailable()) {
                     try {
-                        setPermit(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+                        setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
                         if (getPermit()) {
                             updatePreview();
                         }
@@ -174,18 +176,32 @@ public class Camera1  extends CameraBase{
 
     @Override
     void stop() {
-        if (mCamera == null) return;
-        if (getPermit()) {
-            mCamera.stopPreview();
-            try {
-                mCamera.setPreviewTexture(null);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            mCamera.release();
-            mCamera = null;
-            isStarted = false;
-        }
+       mHandler.post(new Runnable() {
+           @Override
+           public void run() {
+               try {
+                   setPermit(semaphore.tryAcquire(1500,TimeUnit.MILLISECONDS));
+                   if (getPermit()) {
+                       synchronized (lock){
+                           if (mCamera == null) return;
+                           mCamera.stopPreview();
+                           try {
+                               mCamera.setPreviewTexture(null);
+                           } catch (IOException e) {
+                               e.printStackTrace();
+                           }
+                           mCamera.release();
+                           mCamera = null;
+                           isStarted = false;
+                       }
+                   }
+               } catch (InterruptedException e) {
+                   e.printStackTrace();
+               }finally {
+                   semaphore.release();
+               }
+           }
+       });
     }
 
     @Override
@@ -205,7 +221,9 @@ public class Camera1  extends CameraBase{
         params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
         setProfile(profile);
         mCamera.setParameters(params);
-        mRecorder = new MediaRecorder();
+        if(mRecorder == null) {
+            mRecorder = new MediaRecorder();
+        }
         mRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
             @Override
             public void onInfo(MediaRecorder mr, int what, int extra) {
@@ -251,45 +269,48 @@ public class Camera1  extends CameraBase{
         DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
         Date today = Calendar.getInstance().getTime();
         setFile(new File(mContext.getCacheDir(), "VID_" + df.format(today) + ".mp4"));
-        recordingHandler.post(new Runnable() {
-            @Override
-            public void run() {
+        try {
+            mPermit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+            if(mPermit){
+                mCamera.unlock();
                 try {
-                    setPermit(semaphore.tryAcquire(1, TimeUnit.SECONDS));
-                    mCamera.unlock();
-                    try {
-                        mRecorder.setCamera(mCamera);
-                        mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-                        mRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-                        mRecorder.setProfile(getProfile());
-                        mRecorder.setOutputFile(getFile().getPath());
-                        mRecorder.prepare();
-                        mRecorder.start();
-                        isRecording = true;
-                        startDurationTimer();
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-
-                    if (listener != null) {
-                        listener.onVideoEvent(new VideoEvent(EventType.INFO, null, VideoEvent.EventInfo.RECORDING_STARTED.toString()));
-                    }
-                } catch (InterruptedException e) {
+                    mRecorder.setCamera(mCamera);
+                    mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                    mRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
+                    mRecorder.setProfile(getProfile());
+                    mRecorder.setOutputFile(getFile().getPath());
+                    mRecorder.prepare();
+                    mRecorder.start();
+                    isRecording = true;
+                    startDurationTimer();
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
+
+                if (listener != null) {
+                    listener.onVideoEvent(new VideoEvent(EventType.INFO, null, VideoEvent.EventInfo.RECORDING_STARTED.toString()));
+                }
             }
-        });
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }finally {
+            semaphore.release();
+        }
     }
 
     @Override
     void stopRecording() {
-        recordingHandler.post(new Runnable() {
-            @Override
-            public void run() {
+        if(!isRecording){
+            return;
+        }
+        try {
+            mPermit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+            if(mPermit){
                 if (isRecording) {
                     try {
                         mRecorder.stop();
                         stopDurationTimer();
+                        mRecorder.reset();
                         mRecorder.release();
                         mRecorder = null;
                         if (listener != null) {
@@ -301,11 +322,15 @@ public class Camera1  extends CameraBase{
                     } finally {
                         isRecording = false;
                         mCamera.lock();
-                        Thread.currentThread().interrupt();
                     }
                 }
             }
-        });
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }finally {
+            semaphore.release();
+            setPermit(false);
+        }
     }
 
     @Override
@@ -317,7 +342,7 @@ public class Camera1  extends CameraBase{
             setCameraPosition(FancyCamera.CameraPosition.BACK);
         }
         openCamera(getHolder().getWidth(),getHolder().getHeight());
-        updatePreview();
+       // updatePreview();
     }
 
     @Override
@@ -326,7 +351,7 @@ public class Camera1  extends CameraBase{
             @Override
             public void run() {
                 try {
-                    setPermit(semaphore.tryAcquire(1, TimeUnit.SECONDS));
+                    setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
                     if (getPermit()) {
                         setupPreview();
                         if (mCamera != null) {
@@ -391,7 +416,7 @@ public class Camera1  extends CameraBase{
                                                 int cameraId, Camera camera) {
         boolean permit = false;
         try {
-            permit = semaphore.tryAcquire(1, TimeUnit.SECONDS);
+            permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
             if (permit) {
                 Camera.CameraInfo info = new Camera.CameraInfo();
                 Camera.getCameraInfo(cameraId, info);

@@ -15,6 +15,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
+import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -77,6 +78,7 @@ class Camera2 extends CameraBase {
     private static final SparseIntArray INVERSE_ORIENTATIONS = new SparseIntArray();
     private Integer mSensorOrientation;
     private String cameraIdToOpen = "0";
+
     @SuppressLint("NewApi")
     Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
@@ -91,7 +93,7 @@ class Camera2 extends CameraBase {
 
 
     private void startBackgroundThread() {
-        synchronized (lock){
+        synchronized (lock) {
             handlerThread = new HandlerThread(CameraThread);
             handlerThread.start();
             mHandler = new Handler(handlerThread.getLooper());
@@ -109,7 +111,8 @@ class Camera2 extends CameraBase {
 
     @SuppressLint("NewApi")
     private void stopBackgroundThread() {
-        if(handlerThread == null && recordingHandlerThread == null && previewHandlerThread == null) return;
+        if (handlerThread == null && recordingHandlerThread == null && previewHandlerThread == null)
+            return;
         if (handlerThread != null) {
             handlerThread.quitSafely();
         }
@@ -170,17 +173,7 @@ class Camera2 extends CameraBase {
                 int cameraOrientation;
                 StreamConfigurationMap map = null;
                 for (String cameraId : cameraList) {
-                    if (mPosition == FancyCamera.CameraPosition.BACK) {
-                        characteristics = mManager.getCameraCharacteristics(cameraId);
-                        cameraOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
-                        if (cameraOrientation == CameraCharacteristics.LENS_FACING_BACK) {
-                            cameraIdToOpen = cameraId;
-                            map = characteristics
-                                    .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                            mSensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
-                            break;
-                        }
-                    } else if(mPosition == FancyCamera.CameraPosition.FRONT) {
+                    if (mPosition == FancyCamera.CameraPosition.FRONT) {
                         CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
                         cameraOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
                         if (cameraOrientation == CameraCharacteristics.LENS_FACING_FRONT) {
@@ -191,7 +184,7 @@ class Camera2 extends CameraBase {
                             break;
                         }
 
-                    }else{
+                    } else {
                         CameraCharacteristics characteristics = mManager.getCameraCharacteristics(cameraId);
                         cameraOrientation = characteristics.get(CameraCharacteristics.LENS_FACING);
                         if (cameraOrientation == CameraCharacteristics.LENS_FACING_BACK) {
@@ -215,6 +208,7 @@ class Camera2 extends CameraBase {
 
                 previewSize = getPreviewSize(map.getOutputSizes(SurfaceTexture.class));
                 videoSize = getPreviewSize(map.getOutputSizes(MediaRecorder.class));
+
                 mMediaRecorder = new MediaRecorder();
                 mManager.openCamera(cameraIdToOpen, new CameraDevice.StateCallback() {
                     @Override
@@ -271,9 +265,9 @@ class Camera2 extends CameraBase {
         }
         boolean permit = false;
         try {
-            permit = semaphore.tryAcquire(1, TimeUnit.SECONDS);
+            permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
             if (permit) {
-                if(mMediaRecorder == null){
+                if (mMediaRecorder == null) {
                     mMediaRecorder = new MediaRecorder();
                 }
                 mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
@@ -281,11 +275,11 @@ class Camera2 extends CameraBase {
                 DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
                 Date today = Calendar.getInstance().getTime();
                 setFile(new File(mContext.getCacheDir(), "VID_" + df.format(today) + ".mp4"));
-                mMediaRecorder.setProfile(getCamcorderProfile(FancyCamera.Quality.values()[quality]));
+                CamcorderProfile profile = getCamcorderProfile(FancyCamera.Quality.values()[quality]);
+                mMediaRecorder.setProfile(profile);
                 mMediaRecorder.setOutputFile(getFile().getPath());
-                System.out.println(videoSize.getHeight());
-                System.out.println(videoSize.getWidth());
-                mMediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
+                //  mMediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
+                mMediaRecorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight);
                 mMediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
                     @Override
                     public void onInfo(MediaRecorder mr, int what, int extra) {
@@ -328,7 +322,7 @@ class Camera2 extends CameraBase {
 
                 });
                 int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
-                if(mSensorOrientation != null){
+                if (mSensorOrientation != null) {
                     switch (mSensorOrientation) {
                         case SENSOR_ORIENTATION_DEFAULT_DEGREES:
                             mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
@@ -380,7 +374,7 @@ class Camera2 extends CameraBase {
         if (mCameraDevice == null || !getHolder().isAvailable()) {
             return;
         }
-        synchronized (lock){
+        synchronized (lock) {
             SurfaceTexture texture = getHolder().getSurfaceTexture();
             assert texture != null;
             texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
@@ -396,7 +390,7 @@ class Camera2 extends CameraBase {
 
                             @Override
                             public void onConfigured(@NonNull CameraCaptureSession session) {
-                                synchronized (lock){
+                                synchronized (lock) {
                                     mPreviewSession = session;
                                     updatePreview();
                                 }
@@ -415,7 +409,7 @@ class Camera2 extends CameraBase {
 
     @SuppressLint("NewApi")
     private void closePreviewSession() {
-        synchronized (lock){
+        synchronized (lock) {
             if (mPreviewSession != null) {
                 mPreviewSession.close();
                 mPreviewSession = null;
@@ -430,21 +424,21 @@ class Camera2 extends CameraBase {
 
     @Override
     void start() {
-        //startBackgroundThread();
         stop();
-        openCamera(getHolder().getWidth(),getHolder().getHeight());
-        //startPreview();
+        openCamera(getHolder().getWidth(), getHolder().getHeight());
     }
 
     @SuppressLint("NewApi")
     @Override
     void stop() {
-        synchronized (lock){
+        synchronized (lock) {
             if (mCameraDevice != null) {
                 closePreviewSession();
+                if (mCameraDevice == null) {
+                    return;
+                }
                 mCameraDevice.close();
                 mCameraDevice = null;
-                //stopBackgroundThread();
             }
         }
     }
@@ -476,17 +470,27 @@ class Camera2 extends CameraBase {
             mCameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
-                    synchronized (lock){
+                    synchronized (lock) {
                         mPreviewSession = cameraCaptureSession;
                         updatePreview();
-                        recordingHandler.post(new Runnable() {
+                        Handler mainHandler = new Handler(mContext.getMainLooper());
+                        mainHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                mMediaRecorder.start();
-                                isRecording = true;
-                                startDurationTimer();
-                                if (listener != null) {
-                                    listener.onVideoEvent(new VideoEvent(EventType.INFO, null, VideoEvent.EventInfo.RECORDING_STARTED.toString()));
+                                try {
+                                    boolean permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+                                    if (permit) {
+                                        mMediaRecorder.start();
+                                        isRecording = true;
+                                        startDurationTimer();
+                                        if (listener != null) {
+                                            listener.onVideoEvent(new VideoEvent(EventType.INFO, null, VideoEvent.EventInfo.RECORDING_STARTED.toString()));
+                                        }
+                                    }
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                } finally {
+                                    semaphore.release();
                                 }
                             }
                         });
@@ -505,32 +509,54 @@ class Camera2 extends CameraBase {
         }
     }
 
+    @SuppressLint("NewApi")
+    private void stopRecord() {
+        synchronized (lock) {
+            if (!isRecording) {
+                return;
+            }
+
+            try {
+                mPreviewSession.stopRepeating();
+                mPreviewSession.abortCaptures();
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+
+
+            try {
+                mMediaRecorder.stop();
+            } catch (RuntimeException e) {
+                //handle the exception
+            }
+
+            isRecording = false;
+            stopDurationTimer();
+            mMediaRecorder.reset();
+            mMediaRecorder.release();
+            mMediaRecorder = null;
+            if (listener != null) {
+                listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
+            }
+            setFile(null);
+        }
+    }
+
     @Override
     void stopRecording() {
-        sessionHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                recordingHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        synchronized (lock) {
-                            if(!isRecording){
-                                return;
-                            }
-                            mMediaRecorder.stop();
-                            isRecording = false;
-                            stopDurationTimer();
-                            mMediaRecorder.reset();
-                            if (listener != null) {
-                                listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
-                            }
-                            setFile(null);
-                        }
-                    }
-                });
-                startPreview();
+        try {
+            boolean permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+            if (permit) {
+                synchronized (lock) {
+                    stopRecord();
+                    start();
+                }
             }
-        });
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            semaphore.release();
+        }
     }
 
     @SuppressLint("NewApi")
@@ -560,14 +586,27 @@ class Camera2 extends CameraBase {
 
     @Override
     void toggleCamera() {
-        stop();
-        synchronized (lock){
-            if (mPosition == FancyCamera.CameraPosition.BACK) {
-                mPosition = FancyCamera.CameraPosition.FRONT;
-            } else {
-                mPosition = FancyCamera.CameraPosition.BACK;
+        try {
+            boolean permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+            if (permit) {
+                synchronized (lock) {
+                    if (isRecording) {
+                        stopRecord();
+                    }
+                    stop();
+                    if (mPosition == FancyCamera.CameraPosition.BACK) {
+                        mPosition = FancyCamera.CameraPosition.FRONT;
+                    } else {
+                        mPosition = FancyCamera.CameraPosition.BACK;
+                    }
+                    start();
+
+                }
             }
-            start();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            semaphore.release();
         }
     }
 
@@ -588,8 +627,8 @@ class Camera2 extends CameraBase {
     @SuppressLint("NewApi")
     @Override
     void setCameraPosition(FancyCamera.CameraPosition position) {
-        if(position != mPosition){
-            synchronized (lock){
+        if (position != mPosition) {
+            synchronized (lock) {
                 mPosition = position;
 
             }
@@ -650,4 +689,5 @@ class Camera2 extends CameraBase {
         }
         return profile;
     }
+
 }
