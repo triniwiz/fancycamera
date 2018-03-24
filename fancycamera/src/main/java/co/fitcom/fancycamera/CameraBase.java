@@ -31,6 +31,7 @@ public abstract class CameraBase {
     public static String CameraRecorderThread = "CameraRecorderThread";
     public static String PreviewThread = "PreviewThread";
     public static String sessionThread = "SessionThread";
+    private TextViewListener textViewListener;
 
     public TextureView getHolder() {
         return holder;
@@ -70,6 +71,13 @@ public abstract class CameraBase {
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
 
+    public void setTextViewListener(TextViewListener listener){
+        textViewListener = listener;
+    }
+
+    public TextViewListener getTextViewListener(){
+        return textViewListener;
+    }
     public CameraEventListener getListener() {
         return listener;
     }

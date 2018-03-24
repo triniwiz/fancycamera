@@ -7,46 +7,58 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:orientation="vertical">
 
-    <co.fitcom.fancycamera.FancyCamera
-        app:cameraPosition="front"
-        app:quality="max2160p"
-        android:id="@+id/holder"
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="300dp"
-        android:orientation="vertical"/>
+        android:layout_height="match_parent">
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
 
-    <TextView
-        android:id="@+id/durationView"
-        android:layout_gravity="center_horizontal"
-        android:text="0"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        tools:ignore="HardcodedText" />
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:onClick="startRecording"
-        android:text="@string/start_recording" />
+            <co.fitcom.fancycamera.FancyCamera
+                app:cameraPosition="front"
+                android:id="@+id/holder"
+                android:layout_width="match_parent"
+                android:layout_height="300dp"
+                android:orientation="vertical"/>
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:onClick="stopRecording"
-        android:text="@string/stop_recording" />
+            <TextView
+                android:id="@+id/durationView"
+                android:layout_gravity="center_horizontal"
+                android:text="0"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                tools:ignore="HardcodedText" />
 
-    <Button
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:onClick="toggleCamera"
-        android:text="@string/toggle_camera" />
+            <Button
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:onClick="startRecording"
+                android:text="@string/start_recording" />
 
-    <VideoView
-        android:id="@+id/videoPlayer"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
+            <Button
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:onClick="stopRecording"
+                android:text="@string/stop_recording" />
+
+            <Button
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:onClick="toggleCamera"
+                android:text="@string/toggle_camera" />
+
+            <VideoView
+                android:id="@+id/videoPlayer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+
+        </LinearLayout>
+    </ScrollView>
 
 </LinearLayout>

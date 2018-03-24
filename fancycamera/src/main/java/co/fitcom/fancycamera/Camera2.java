@@ -12,7 +12,9 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
@@ -33,8 +35,10 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.util.Size;
 import android.util.SparseIntArray;
+import android.view.Display;
 import android.view.Surface;
 import android.view.TextureView;
+import android.view.WindowManager;
 
 import java.io.File;
 import java.io.IOException;
@@ -78,7 +82,7 @@ class Camera2 extends CameraBase {
     private static final SparseIntArray INVERSE_ORIENTATIONS = new SparseIntArray();
     private Integer mSensorOrientation;
     private String cameraIdToOpen = "0";
-
+    boolean mAutoFocus;
     @SuppressLint("NewApi")
     Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
@@ -89,6 +93,37 @@ class Camera2 extends CameraBase {
         }
         mContext = context;
         startBackgroundThread();
+
+        setTextViewListener(new TextViewListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+                if (getHolder() != null) {
+                    Handler mainHandler = new Handler(mContext.getMainLooper());
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            configureTransform(getHolder().getWidth(), getHolder().getHeight());
+                        }
+                    });
+                }
+            }
+
+            @Override
+            public void onSurfaceTextureDestroyed(SurfaceTexture surface) {
+
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+
+            }
+        });
+
     }
 
 
@@ -206,6 +241,7 @@ class Camera2 extends CameraBase {
                     throw new RuntimeException("Cannot get available preview/video sizes");
                 }
 
+
                 previewSize = getPreviewSize(map.getOutputSizes(SurfaceTexture.class));
                 videoSize = getPreviewSize(map.getOutputSizes(MediaRecorder.class));
 
@@ -278,8 +314,7 @@ class Camera2 extends CameraBase {
                 CamcorderProfile profile = getCamcorderProfile(FancyCamera.Quality.values()[quality]);
                 mMediaRecorder.setProfile(profile);
                 mMediaRecorder.setOutputFile(getFile().getPath());
-                //  mMediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
-                mMediaRecorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight);
+                mMediaRecorder.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
                 mMediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
                     @Override
                     public void onInfo(MediaRecorder mr, int what, int extra) {
@@ -322,16 +357,27 @@ class Camera2 extends CameraBase {
 
                 });
                 int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
-                if (mSensorOrientation != null) {
-                    switch (mSensorOrientation) {
-                        case SENSOR_ORIENTATION_DEFAULT_DEGREES:
-                            mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
-                            break;
-                        case SENSOR_ORIENTATION_INVERSE_DEGREES:
-                            mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
-                            break;
+
+                int orientation = activity.getResources().getConfiguration().orientation;
+
+                if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+                    if (mSensorOrientation != null) {
+                        switch (mSensorOrientation) {
+                            case SENSOR_ORIENTATION_DEFAULT_DEGREES:
+                                mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
+                                break;
+                            case SENSOR_ORIENTATION_INVERSE_DEGREES:
+                                mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
+                                break;
+                        }
                     }
+                }else if(orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_90 == rotation){
+                     mMediaRecorder.setOrientationHint(0);
+                }else if(Surface.ROTATION_270 == rotation){
+                    mMediaRecorder.setOrientationHint(180);
                 }
+
+
                 mMediaRecorder.prepare();
             }
         } catch (InterruptedException e) {
@@ -344,7 +390,30 @@ class Camera2 extends CameraBase {
     }
 
     @SuppressLint("NewApi")
+    void updateAutoFocus() {
+        if (mAutoFocus) {
+             int[] modes = characteristics.get(
+                    CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
+            // Auto focus is not supported
+            if (modes == null || modes.length == 0 ||
+                    (modes.length == 1 && modes[0] == CameraCharacteristics.CONTROL_AF_MODE_OFF)) {
+                mAutoFocus = false;
+                mPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                        CaptureRequest.CONTROL_AF_MODE_OFF);
+            } else {
+                mPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            }
+        } else {
+            mPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                    CaptureRequest.CONTROL_AF_MODE_OFF);
+        }
+    }
+
+
+    @SuppressLint("NewApi")
     private Size getPreviewSize(Size[] sizes) {
+
         if (quality == FancyCamera.Quality.HIGHEST.getValue()) {
             return sizes[0];
         }
@@ -353,20 +422,75 @@ class Camera2 extends CameraBase {
             return sizes[sizes.length - 1];
         }
 
+        return getSupportedSize(sizes, quality);
+    }
+
+    @SuppressLint("NewApi")
+    private Size getSupportedSize(Size[] sizes, int quality) {
+        WindowManager wm = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+        Display display = wm.getDefaultDisplay();
+        Point deviceSize = new Point();
+        display.getSize(deviceSize);
+        int width = deviceSize.x;
+        int height = deviceSize.y;
+
+        Size optimalSize = null;
+        int count = 0;
         for (Size size : sizes) {
-            if (quality == FancyCamera.Quality.MAX_480P.getValue() && size.getWidth() == 480) {
-                return size;
-            } else if (quality == FancyCamera.Quality.MAX_720P.getValue() && size.getWidth() == 720) {
-                return size;
-            } else if (quality == FancyCamera.Quality.MAX_1080P.getValue() && size.getWidth() == 1080) {
-                return size;
-            } else if (quality == FancyCamera.Quality.MAX_2160P.getValue() && size.getWidth() == 2160) {
-                return size;
-            } else if (quality == FancyCamera.Quality.QVGA.getValue() && size.getWidth() == 240) {
-                return size;
+            count++;
+            if (quality == FancyCamera.Quality.MAX_480P.getValue()) {
+                if (size.getHeight() == 480 && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = getSupportedSize(sizes, FancyCamera.Quality.QVGA.getValue());
+                        break;
+                    }
+                }
+            } else if (quality == FancyCamera.Quality.MAX_720P.getValue()) {
+                if (size.getHeight() == 720  && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = getSupportedSize(sizes, FancyCamera.Quality.MAX_480P.getValue());
+                        break;
+                    }
+                }
+            } else if (quality == FancyCamera.Quality.MAX_1080P.getValue()) {
+                if (size.getHeight() == 1080  && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = getSupportedSize(sizes, FancyCamera.Quality.MAX_720P.getValue());
+                        break;
+                    }
+                }
+            } else if (quality == FancyCamera.Quality.MAX_2160P.getValue()) {
+                if (size.getHeight() == 2160  && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = getSupportedSize(sizes, FancyCamera.Quality.MAX_1080P.getValue());
+                        break;
+                    }
+                }
+            } else if (quality == FancyCamera.Quality.QVGA.getValue()) {
+                if (size.getHeight() == 240  && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = sizes[sizes.length - 1];
+                        break;
+                    }
+                }
             }
         }
-        return sizes[sizes.length - 1];
+        return optimalSize;
     }
 
     @SuppressLint("NewApi")
@@ -458,11 +582,9 @@ class Camera2 extends CameraBase {
             texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
             mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
             List<Surface> surfaces = new ArrayList<>();
-
             Surface previewSurface = new Surface(texture);
             surfaces.add(previewSurface);
             mPreviewBuilder.addTarget(previewSurface);
-
             Surface recorderSurface = mMediaRecorder.getSurface();
             surfaces.add(recorderSurface);
             mPreviewBuilder.addTarget(recorderSurface);

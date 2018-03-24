@@ -19,7 +19,7 @@ import co.fitcom.fancycamera.FancyCamera;
 import co.fitcom.fancycamera.PhotoEvent;
 import co.fitcom.fancycamera.VideoEvent;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
     FancyCamera cameraView;
     VideoView videoPlayer;
     TextView durationView;
@@ -32,7 +32,7 @@ public class MainActivity extends AppCompatActivity {
         videoPlayer = findViewById(R.id.videoPlayer);
         durationView = findViewById(R.id.durationView);
         cameraView = findViewById(R.id.holder);
-        cameraView.setQuality(2);
+        cameraView.setQuality(FancyCamera.Quality.HIGHEST.getValue());
         cameraView.setListener(new CameraEventListenerUI(){
             @Override
             public void onPhotoEventUI(PhotoEvent event) {

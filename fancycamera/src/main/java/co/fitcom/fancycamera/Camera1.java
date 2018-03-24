@@ -9,6 +9,7 @@ package co.fitcom.fancycamera;
 
 import android.app.Activity;
 import android.content.Context;
+import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
 import android.media.MediaRecorder;
@@ -60,7 +61,29 @@ public class Camera1  extends CameraBase{
             mPosition = position;
         }
         startBackgroundThread();
+        setTextViewListener(new TextViewListener() {
+            @Override
+            public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
+
+            }
+
+            @Override
+            public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+
+            }
+
+            @Override
+            public void onSurfaceTextureDestroyed(SurfaceTexture surface) {
+
+            }
+
+            @Override
+            public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+
+            }
+        });
     }
+
 
     @Override
     boolean hasCamera() {

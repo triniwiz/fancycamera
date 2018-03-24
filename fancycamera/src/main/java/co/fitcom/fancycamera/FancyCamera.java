@@ -35,21 +35,22 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     private String[] VIDEO_RECORDER_PERMISSIONS = new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA};
     private boolean isReady = false;
     private CameraBase cameraBase;
+
     public FancyCamera(Context context) {
         super(context);
-        init(context,null);
+        init(context, null);
     }
 
     public FancyCamera(Context context, AttributeSet attrs) {
         super(context, attrs);
-        init(context,attrs);
+        init(context, attrs);
     }
 
-    private void init(Context context, @Nullable AttributeSet attrs){
-        if(Build.VERSION.SDK_INT >= 21){
-            cameraBase = new Camera2(getContext(),this,CameraPosition.values()[getCameraPosition()]);
-        }else{
-            cameraBase = new Camera1(getContext(),this,CameraPosition.values()[getCameraPosition()]);
+    private void init(Context context, @Nullable AttributeSet attrs) {
+        if (Build.VERSION.SDK_INT >= 21) {
+            cameraBase = new Camera2(getContext(), this, CameraPosition.values()[getCameraPosition()]);
+        } else {
+            cameraBase = new Camera1(getContext(), this, CameraPosition.values()[getCameraPosition()]);
         }
         if (attrs != null) {
             TypedArray a = context.obtainStyledAttributes(
@@ -70,7 +71,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         this.setSurfaceTextureListener(this);
     }
 
-    public void setFile(File file){
+    public void setFile(File file) {
         cameraBase.setFile(file);
     }
 
@@ -128,7 +129,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     public boolean hasPermission() {
-        if(Build.VERSION.SDK_INT > 23){
+        if (Build.VERSION.SDK_INT > 23) {
             return true;
         }
         return Build.VERSION.SDK_INT < 23 || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) == (PackageManager.PERMISSION_GRANTED) && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == (PackageManager.PERMISSION_GRANTED);
@@ -153,26 +154,38 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     @Override
     public void onSurfaceTextureAvailable(SurfaceTexture surface, int width, int height) {
-        if(!hasPermission()){
+        if (cameraBase.getTextViewListener() != null) {
+            cameraBase.getTextViewListener().onSurfaceTextureAvailable(surface, width, height);
+        }
+        if (!hasPermission()) {
             requestPermission();
             return;
         }
-        cameraBase.openCamera(width,height);
+        cameraBase.openCamera(width, height);
     }
 
     @Override
     public void onSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height) {
+        if (cameraBase.getTextViewListener() != null) {
+            cameraBase.getTextViewListener().onSurfaceTextureSizeChanged(surface, width, height);
+        }
         cameraBase.updatePreview();
     }
 
     @Override
     public boolean onSurfaceTextureDestroyed(SurfaceTexture surface) {
+        if (cameraBase.getTextViewListener() != null) {
+            cameraBase.getTextViewListener().onSurfaceTextureDestroyed(surface);
+        }
         cameraBase.stop();
         return true;
     }
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture surface) {
+        if (cameraBase.getTextViewListener() != null) {
+            cameraBase.getTextViewListener().onSurfaceTextureUpdated(surface);
+        }
     }
 
     public enum Quality {
