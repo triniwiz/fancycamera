@@ -177,6 +177,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         if (cameraBase.getTextViewListener() != null) {
             cameraBase.getTextViewListener().onSurfaceTextureDestroyed(surface);
         }
+        cameraBase.stopRecording();
         cameraBase.stop();
         return true;
     }

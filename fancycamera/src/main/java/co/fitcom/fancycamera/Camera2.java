@@ -9,6 +9,7 @@ package co.fitcom.fancycamera;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -53,6 +54,7 @@ import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+@TargetApi(21)
 class Camera2 extends CameraBase {
     private static final Object lock = new Object();
     private CameraManager mManager;
@@ -83,7 +85,8 @@ class Camera2 extends CameraBase {
     private Integer mSensorOrientation;
     private String cameraIdToOpen = "0";
     boolean mAutoFocus;
-    @SuppressLint("NewApi")
+
+
     Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
         if (position == null) {
@@ -115,12 +118,10 @@ class Camera2 extends CameraBase {
 
             @Override
             public void onSurfaceTextureDestroyed(SurfaceTexture surface) {
-
             }
 
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
-
             }
         });
 
@@ -144,7 +145,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     private void stopBackgroundThread() {
         if (handlerThread == null && recordingHandlerThread == null && previewHandlerThread == null)
             return;
@@ -170,7 +171,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     @Override
     boolean hasCamera() {
         try {
@@ -197,7 +198,6 @@ class Camera2 extends CameraBase {
     }
 
 
-    @SuppressLint("NewApi")
     @Override
     void openCamera(int width, int height) {
         mManager = (CameraManager) mContext.getSystemService(Context.CAMERA_SERVICE);
@@ -287,7 +287,7 @@ class Camera2 extends CameraBase {
 
     }
 
-    @SuppressLint("NewApi")
+
     private void setUpCaptureRequestBuilder(CaptureRequest.Builder builder) {
         builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
     }
@@ -371,10 +371,10 @@ class Camera2 extends CameraBase {
                                 break;
                         }
                     }
-                }else if(orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_90 == rotation){
-                     mMediaRecorder.setOrientationHint(0);
-                }else if(Surface.ROTATION_270 == rotation){
-                    mMediaRecorder.setOrientationHint(180);
+                } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_90 == rotation) {
+                    mMediaRecorder.setOrientationHint(0);
+                } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_270 == rotation) {
+                    mMediaRecorder.setOrientationHint(0);
                 }
 
 
@@ -389,10 +389,10 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     void updateAutoFocus() {
         if (mAutoFocus) {
-             int[] modes = characteristics.get(
+            int[] modes = characteristics.get(
                     CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES);
             // Auto focus is not supported
             if (modes == null || modes.length == 0 ||
@@ -411,21 +411,11 @@ class Camera2 extends CameraBase {
     }
 
 
-    @SuppressLint("NewApi")
     private Size getPreviewSize(Size[] sizes) {
-
-        if (quality == FancyCamera.Quality.HIGHEST.getValue()) {
-            return sizes[0];
-        }
-
-        if (quality == FancyCamera.Quality.LOWEST.getValue()) {
-            return sizes[sizes.length - 1];
-        }
-
         return getSupportedSize(sizes, quality);
     }
 
-    @SuppressLint("NewApi")
+
     private Size getSupportedSize(Size[] sizes, int quality) {
         WindowManager wm = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
         Display display = wm.getDefaultDisplay();
@@ -438,7 +428,19 @@ class Camera2 extends CameraBase {
         int count = 0;
         for (Size size : sizes) {
             count++;
-            if (quality == FancyCamera.Quality.MAX_480P.getValue()) {
+            if (quality == FancyCamera.Quality.LOWEST.getValue()) {
+                return sizes[sizes.length - 1];
+            } else if (quality == FancyCamera.Quality.HIGHEST.getValue()) {
+                if (size.getHeight() <= height && size.getWidth() <= width) {
+                    optimalSize = size;
+                    break;
+                } else {
+                    if (count == sizes.length - 1) {
+                        optimalSize = sizes[sizes.length - 1];
+                        break;
+                    }
+                }
+            } else if (quality == FancyCamera.Quality.MAX_480P.getValue()) {
                 if (size.getHeight() == 480 && size.getWidth() <= width) {
                     optimalSize = size;
                     break;
@@ -449,7 +451,7 @@ class Camera2 extends CameraBase {
                     }
                 }
             } else if (quality == FancyCamera.Quality.MAX_720P.getValue()) {
-                if (size.getHeight() == 720  && size.getWidth() <= width) {
+                if (size.getHeight() == 720 && size.getWidth() <= width) {
                     optimalSize = size;
                     break;
                 } else {
@@ -459,7 +461,7 @@ class Camera2 extends CameraBase {
                     }
                 }
             } else if (quality == FancyCamera.Quality.MAX_1080P.getValue()) {
-                if (size.getHeight() == 1080  && size.getWidth() <= width) {
+                if (size.getHeight() == 1080 && size.getWidth() <= width) {
                     optimalSize = size;
                     break;
                 } else {
@@ -469,7 +471,7 @@ class Camera2 extends CameraBase {
                     }
                 }
             } else if (quality == FancyCamera.Quality.MAX_2160P.getValue()) {
-                if (size.getHeight() == 2160  && size.getWidth() <= width) {
+                if (size.getHeight() == 2160 && size.getWidth() <= width) {
                     optimalSize = size;
                     break;
                 } else {
@@ -479,7 +481,7 @@ class Camera2 extends CameraBase {
                     }
                 }
             } else if (quality == FancyCamera.Quality.QVGA.getValue()) {
-                if (size.getHeight() == 240  && size.getWidth() <= width) {
+                if (size.getHeight() == 240 && size.getWidth() <= width) {
                     optimalSize = size;
                     break;
                 } else {
@@ -493,7 +495,7 @@ class Camera2 extends CameraBase {
         return optimalSize;
     }
 
-    @SuppressLint("NewApi")
+
     private void startPreview() {
         if (mCameraDevice == null || !getHolder().isAvailable()) {
             return;
@@ -531,7 +533,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     private void closePreviewSession() {
         synchronized (lock) {
             if (mPreviewSession != null) {
@@ -552,7 +554,7 @@ class Camera2 extends CameraBase {
         openCamera(getHolder().getWidth(), getHolder().getHeight());
     }
 
-    @SuppressLint("NewApi")
+
     @Override
     void stop() {
         synchronized (lock) {
@@ -567,7 +569,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     @Override
     void startRecording() {
         if (null == mCameraDevice || !getHolder().isAvailable() || null == previewSize || isRecording) {
@@ -631,7 +633,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     private void stopRecord() {
         synchronized (lock) {
             if (!isRecording) {
@@ -681,7 +683,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     private void configureTransform(int viewWidth, int viewHeight) {
         Activity activity = (Activity) mContext;
         if (null == getHolder() || null == previewSize || null == activity) {
@@ -732,7 +734,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     @Override
     void updatePreview() {
         if (null == mCameraDevice || null == mPreviewSession) {
@@ -746,7 +748,7 @@ class Camera2 extends CameraBase {
         }
     }
 
-    @SuppressLint("NewApi")
+
     @Override
     void setCameraPosition(FancyCamera.CameraPosition position) {
         if (position != mPosition) {
