@@ -3,4 +3,5 @@
     <string name="start_recording">Start Recording</string>
     <string name="stop_recording">Stop Recording</string>
     <string name="toggle_camera">Toggle Camera</string>
+    <string name="view_home">View Home</string>
 </resources>

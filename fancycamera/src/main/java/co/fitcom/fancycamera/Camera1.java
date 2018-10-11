@@ -90,6 +90,16 @@ public class Camera1  extends CameraBase{
         return Camera.getNumberOfCameras() > 0;
     }
 
+    @Override
+    boolean cameraStarted() {
+        return isStarted;
+    }
+
+    @Override
+    boolean cameraRecording() {
+        return isRecording;
+    }
+
     private boolean getPermit() {
         return mPermit;
     }
@@ -401,6 +411,14 @@ public class Camera1  extends CameraBase{
                 }
             }
         });
+    }
+
+    @Override
+    void release() {
+        if(isRecording){
+            stopRecording();
+        }
+        stop();
     }
 
     @Override

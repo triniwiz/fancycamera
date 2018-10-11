@@ -2,6 +2,8 @@ package co.fitcom.videorecorder;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
+import android.app.Fragment;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -19,7 +21,7 @@ import co.fitcom.fancycamera.FancyCamera;
 import co.fitcom.fancycamera.PhotoEvent;
 import co.fitcom.fancycamera.VideoEvent;
 
-public class MainActivity extends Activity {
+public class MainActivity extends AppCompatActivity {
     FancyCamera cameraView;
     VideoView videoPlayer;
     TextView durationView;
@@ -83,10 +85,15 @@ public class MainActivity extends Activity {
     }
 
 
+    public void goToHome(View view){
+        Intent i = new Intent(this,Home.class);
+        startActivity(i);
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
-        cameraView.stop();
+        cameraView.release();
     }
 
     @Override

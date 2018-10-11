@@ -55,6 +55,10 @@ public abstract class CameraBase {
 
     abstract boolean hasCamera();
 
+    abstract boolean cameraStarted();
+
+    abstract boolean cameraRecording();
+
     abstract void openCamera(int width, int height);
 
     abstract void start();
@@ -68,6 +72,8 @@ public abstract class CameraBase {
     abstract void toggleCamera();
 
     abstract void updatePreview();
+
+    abstract void release();
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
 

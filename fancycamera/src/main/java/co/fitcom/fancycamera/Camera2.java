@@ -77,6 +77,7 @@ class Camera2 extends CameraBase {
     private CameraCaptureSession mPreviewSession;
     private Semaphore semaphore = new Semaphore(1);
     private boolean isRecording = false;
+    private boolean isStarted = false;
 
     private static final int SENSOR_ORIENTATION_DEFAULT_DEGREES = 90;
     private static final int SENSOR_ORIENTATION_INVERSE_DEGREES = 270;
@@ -117,8 +118,7 @@ class Camera2 extends CameraBase {
             }
 
             @Override
-            public void onSurfaceTextureDestroyed(SurfaceTexture surface) {
-            }
+            public void onSurfaceTextureDestroyed(SurfaceTexture surface) {}
 
             @Override
             public void onSurfaceTextureUpdated(SurfaceTexture surface) {
@@ -180,6 +180,16 @@ class Camera2 extends CameraBase {
             e.printStackTrace();
         }
         return false;
+    }
+
+    @Override
+    boolean cameraStarted() {
+        return isStarted;
+    }
+
+    @Override
+    boolean cameraRecording() {
+        return isRecording;
     }
 
 
@@ -250,6 +260,7 @@ class Camera2 extends CameraBase {
                     @Override
                     public void onOpened(@NonNull CameraDevice camera) {
                         mCameraDevice = camera;
+                        isStarted = true;
                         if (getHolder() != null) {
                             Handler mainHandler = new Handler(mContext.getMainLooper());
                             mainHandler.post(new Runnable() {
@@ -267,7 +278,7 @@ class Camera2 extends CameraBase {
                     public void onDisconnected(@NonNull CameraDevice camera) {
                         semaphore.release();
                         camera.close();
-
+                        isStarted = false;
                         mCameraDevice = null;
                     }
 
@@ -276,6 +287,7 @@ class Camera2 extends CameraBase {
                         semaphore.release();
                         camera.close();
                         mCameraDevice = null;
+                        isStarted = false;
                     }
                 }, mHandler);
             }
@@ -303,9 +315,7 @@ class Camera2 extends CameraBase {
         try {
             permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
             if (permit) {
-                if (mMediaRecorder == null) {
-                    mMediaRecorder = new MediaRecorder();
-                }
+                mMediaRecorder = new MediaRecorder();
                 mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
                 mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.SURFACE);
                 DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
@@ -513,7 +523,6 @@ class Camera2 extends CameraBase {
 
                 mCameraDevice.createCaptureSession(Collections.singletonList(previewSurface),
                         new CameraCaptureSession.StateCallback() {
-
                             @Override
                             public void onConfigured(@NonNull CameraCaptureSession session) {
                                 synchronized (lock) {
@@ -542,6 +551,7 @@ class Camera2 extends CameraBase {
             }
 
             if (null != mMediaRecorder) {
+                mMediaRecorder.reset();
                 mMediaRecorder.release();
                 mMediaRecorder = null;
             }
@@ -557,15 +567,24 @@ class Camera2 extends CameraBase {
 
     @Override
     void stop() {
-        synchronized (lock) {
-            if (mCameraDevice != null) {
-                closePreviewSession();
-                if (mCameraDevice == null) {
-                    return;
+        try {
+            boolean permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
+            if (permit) {
+                synchronized (lock) {
+                    if (mCameraDevice != null) {
+                        closePreviewSession();
+                        if (mCameraDevice == null) {
+                            return;
+                        }
+                        mCameraDevice.close();
+                        mCameraDevice = null;
+                    }
                 }
-                mCameraDevice.close();
-                mCameraDevice = null;
             }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }finally {
+            semaphore.release();
         }
     }
 
@@ -632,7 +651,6 @@ class Camera2 extends CameraBase {
             e.printStackTrace();
         }
     }
-
 
     private void stopRecord() {
         synchronized (lock) {
@@ -746,6 +764,14 @@ class Camera2 extends CameraBase {
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    void release() {
+        if(isRecording){
+            stopRecord();
+        }
+        stop();
     }
 
 
