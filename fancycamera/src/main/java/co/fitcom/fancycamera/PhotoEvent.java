@@ -16,23 +16,47 @@ public class PhotoEvent {
     private EventType mType;
     private File mFile;
     private String mMessage;
-    PhotoEvent(EventType type, @Nullable File file, @Nullable String message){
+
+    PhotoEvent(EventType type, @Nullable File file, @Nullable String message) {
         mType = type;
         mFile = file;
         mMessage = message;
     }
-    public EventType getType(){
+
+    public EventType getType() {
         return mType;
     }
-    public File getFile(){
-        return  mFile;
+
+    public File getFile() {
+        return mFile;
     }
 
-    public String getMessage(){
-        return  mMessage;
+    public String getMessage() {
+        return mMessage;
     }
 
-    public enum EventError{}
-    public enum EventInfo{}
+    public enum EventError {
+        UNKNOWN {
+            @Override
+            public String toString() {
+                return "Unknown";
+            }
+        }
+    }
+
+    public enum EventInfo {
+        PHOTO_TAKEN {
+            @Override
+            public String toString() {
+                return "Photo taken";
+            }
+        },
+        UNKNOWN {
+            @Override
+            public String toString() {
+                return "Unknown";
+            }
+        }
+    }
 
 }

@@ -85,8 +85,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    public void goToHome(View view){
-        Intent i = new Intent(this,Home.class);
+    public void goToVideo(View view){
+        Intent i = new Intent(this,MainActivity.class);
+        startActivity(i);
+    }
+
+    public void goToPhoto(View view){
+        Intent i = new Intent(this,Photo.class);
         startActivity(i);
     }
 
@@ -99,13 +104,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        cameraView.start();
+        if(cameraView.hasPermission()){
+            cameraView.start();
+        }else{
+            cameraView.requestPermission();
+        }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if(grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED){
+        if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED){
             cameraView.start();
         }
     }

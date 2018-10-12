@@ -27,10 +27,8 @@ public abstract class CameraBase {
         this.holder = holder;
     }
 
-    public static String CameraThread = "CameraThread";
-    public static String CameraRecorderThread = "CameraRecorderThread";
-    public static String PreviewThread = "PreviewThread";
-    public static String sessionThread = "SessionThread";
+    public final static String CameraThread = "CameraThread";
+
     private TextViewListener textViewListener;
 
     public TextureView getHolder() {
@@ -66,6 +64,8 @@ public abstract class CameraBase {
     abstract void stop();
 
     abstract void startRecording();
+
+    abstract void takePhoto();
 
     abstract void stopRecording();
 

@@ -20,6 +20,8 @@ import android.view.Surface;
 import android.view.TextureView;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -39,10 +41,8 @@ public class Camera1  extends CameraBase{
     private Camera mCamera;
     private Context mContext;
     private FancyCamera.CameraPosition mPosition;
-    private Handler mHandler;
-    private HandlerThread handlerThread;
-    private HandlerThread recordingHandlerThread;
-    private Handler recordingHandler;
+    private Handler backgroundHandler;
+    private HandlerThread backgroundHandlerThread;
     private boolean isRecording;
     private MediaRecorder mRecorder;
     private boolean isStarted;
@@ -109,24 +109,17 @@ public class Camera1  extends CameraBase{
     }
 
     private void startBackgroundThread() {
-        handlerThread = new HandlerThread(CameraThread);
-        handlerThread.start();
-        mHandler = new Handler(handlerThread.getLooper());
-        recordingHandlerThread = new HandlerThread(CameraRecorderThread);
-        recordingHandlerThread.start();
-        recordingHandler = new Handler(handlerThread.getLooper());
+        backgroundHandlerThread = new HandlerThread(CameraThread);
+        backgroundHandlerThread.start();
+        backgroundHandler = new Handler(backgroundHandlerThread.getLooper());
     }
 
     private void stopBackgroundThread() {
-        handlerThread.interrupt();
-        recordingHandlerThread.interrupt();
+        backgroundHandlerThread.interrupt();
         try {
-            handlerThread.join();
-            handlerThread = null;
-            mHandler = null;
-            recordingHandlerThread.join();
-            recordingHandlerThread = null;
-            recordingHandler = null;
+            backgroundHandlerThread.join();
+            backgroundHandlerThread = null;
+            backgroundHandler = null;
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -136,7 +129,7 @@ public class Camera1  extends CameraBase{
     void openCamera(int width,int height) {
         try {
             setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
-            mHandler.post(new Runnable() {
+            backgroundHandler.post(new Runnable() {
                 @Override
                 public void run() {
                     try {
@@ -162,7 +155,7 @@ public class Camera1  extends CameraBase{
 
     private void setupPreview() {
         if (mCamera == null) return;
-        mHandler.post(new Runnable() {
+        backgroundHandler.post(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -186,7 +179,7 @@ public class Camera1  extends CameraBase{
 
     @Override
     void start() {
-        mHandler.post(new Runnable() {
+        backgroundHandler.post(new Runnable() {
             @Override
             public void run() {
                 if (getHolder().isAvailable()) {
@@ -209,7 +202,7 @@ public class Camera1  extends CameraBase{
 
     @Override
     void stop() {
-       mHandler.post(new Runnable() {
+        backgroundHandler.post(new Runnable() {
            @Override
            public void run() {
                try {
@@ -332,6 +325,54 @@ public class Camera1  extends CameraBase{
     }
 
     @Override
+    void takePhoto() {
+        if(isRecording){
+            return;
+        }
+        Camera.Parameters params = mCamera.getParameters();
+        CamcorderProfile profile = getCamcorderProfile(FancyCamera.Quality.values()[getQuality()]);
+        List<Camera.Size> mSupportedPreviewSizes = params.getSupportedPreviewSizes();
+        List<Camera.Size> mSupportedVideoSizes = params.getSupportedVideoSizes();
+        Camera.Size optimalSize = getOptimalVideoSize(mSupportedVideoSizes,
+                mSupportedPreviewSizes, getHolder().getWidth(), getHolder().getHeight());
+
+        profile.videoFrameWidth = optimalSize.width;
+        profile.videoFrameHeight = optimalSize.height;
+        params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
+        setProfile(profile);
+        mCamera.setParameters(params);
+        DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
+        Date today = Calendar.getInstance().getTime();
+        setFile(new File(mContext.getCacheDir(), "PIC_" + df.format(today) + ".jpg"));
+        mCamera.takePicture(null,null, new Camera.PictureCallback() {
+            @Override
+            public void onPictureTaken(byte[] data, Camera camera) {
+                FileOutputStream fos = null;
+                try {
+                    fos = new FileOutputStream(getFile());
+                    fos.write(data);
+                    if(getListener() != null){
+                        PhotoEvent event = new PhotoEvent(EventType.INFO,getFile(),PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
+                        getListener().onPhotoEvent(event);
+                    }
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }finally {
+                    if(fos != null){
+                        try {
+                            fos.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    @Override
     void stopRecording() {
         if(!isRecording){
             return;
@@ -380,7 +421,7 @@ public class Camera1  extends CameraBase{
 
     @Override
     void updatePreview() {
-        mHandler.post(new Runnable() {
+        backgroundHandler.post(new Runnable() {
             @Override
             public void run() {
                 try {

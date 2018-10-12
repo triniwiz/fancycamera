@@ -87,6 +87,10 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         return cameraBase.cameraRecording();
     }
 
+    public void takePhoto(){
+        cameraBase.takePhoto();
+    }
+
     public int getCameraPosition() {
         return mCameraPosition;
     }
