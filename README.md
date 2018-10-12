@@ -43,5 +43,5 @@ compile 'co.fitcom:fancycamera:0.0.1'
 
 # TODO
 
-* [ ] Take photos
-* [ ] Enable/Disable flash
+- [x] Take photos
+- [x] Enable/Disable flash
