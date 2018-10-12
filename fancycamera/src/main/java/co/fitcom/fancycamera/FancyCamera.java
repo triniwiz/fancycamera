@@ -79,15 +79,31 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         return cameraBase.getFile();
     }
 
+    public void toggleFlash() {
+        cameraBase.toggleFlash();
+    }
+
+    public void enableFlash() {
+        cameraBase.enableFlash();
+    }
+
+    public void disableFlash() {
+        cameraBase.disableFlash();
+    }
+
+    public boolean flashEnabled() {
+        return cameraBase.flashEnabled();
+    }
+
     public boolean cameraStarted() {
         return cameraBase.cameraStarted();
     }
 
-    public boolean cameraRecording(){
+    public boolean cameraRecording() {
         return cameraBase.cameraRecording();
     }
 
-    public void takePhoto(){
+    public void takePhoto() {
         cameraBase.takePhoto();
     }
 
@@ -160,7 +176,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         cameraBase.stop();
     }
 
-    public void release(){
+    public void release() {
         cameraBase.release();
     }
 

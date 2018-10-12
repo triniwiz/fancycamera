@@ -50,6 +50,13 @@ public class Photo extends AppCompatActivity {
         cameraView.takePhoto();
     }
 
+    public void toggleFlash(View view) {
+        cameraView.toggleFlash();
+    }
+
+    public void toggleCamera(View view) {
+        cameraView.toggleCamera();
+    }
 
     public void goToHome(View view) {
         Intent i = new Intent(this, Home.class);
@@ -72,7 +79,7 @@ public class Photo extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if(grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED){
+        if (grantResults[0] == PackageManager.PERMISSION_GRANTED && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
             cameraView.start();
         }
     }

@@ -14,6 +14,8 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Point;
@@ -37,6 +39,7 @@ import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Display;
@@ -79,7 +82,7 @@ class Camera2 extends CameraBase {
     private Semaphore semaphore = new Semaphore(1);
     private boolean isRecording = false;
     private boolean isStarted = false;
-
+    private boolean isFlashEnabled = false;
     private static final int SENSOR_ORIENTATION_DEFAULT_DEGREES = 90;
     private static final int SENSOR_ORIENTATION_INVERSE_DEGREES = 270;
     private static final SparseIntArray DEFAULT_ORIENTATIONS = new SparseIntArray();
@@ -132,7 +135,7 @@ class Camera2 extends CameraBase {
 
     private void startBackgroundThread() {
         synchronized (lock) {
-            backgroundHandlerThread= new HandlerThread(CameraThread);
+            backgroundHandlerThread = new HandlerThread(CameraThread);
             backgroundHandlerThread.start();
             backgroundHandler = new Handler(backgroundHandlerThread.getLooper());
         }
@@ -294,6 +297,7 @@ class Camera2 extends CameraBase {
         if (null == activity) {
             return;
         }
+
         boolean permit = false;
         try {
             permit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
@@ -503,7 +507,7 @@ class Camera2 extends CameraBase {
 
                 Surface previewSurface = new Surface(texture);
                 mPreviewBuilder.addTarget(previewSurface);
-
+                // tempOffFlash(mPreviewBuilder);
                 mCameraDevice.createCaptureSession(Collections.singletonList(previewSurface),
                         new CameraCaptureSession.StateCallback() {
                             @Override
@@ -543,6 +547,9 @@ class Camera2 extends CameraBase {
 
     @Override
     void start() {
+        if (isStarted && mCameraDevice != null) {
+            return;
+        }
         stop();
         openCamera(getHolder().getWidth(), getHolder().getHeight());
     }
@@ -550,7 +557,7 @@ class Camera2 extends CameraBase {
 
     @Override
     void stop() {
-        if (!isStarted) {
+        if (!isStarted && mCameraDevice == null) {
             return;
         }
         try {
@@ -588,6 +595,7 @@ class Camera2 extends CameraBase {
             assert texture != null;
             texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
             mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            setupFlash(mPreviewBuilder);
             List<Surface> surfaces = new ArrayList<>();
             Surface previewSurface = new Surface(texture);
             surfaces.add(previewSurface);
@@ -595,7 +603,6 @@ class Camera2 extends CameraBase {
             Surface recorderSurface = mMediaRecorder.getSurface();
             surfaces.add(recorderSurface);
             mPreviewBuilder.addTarget(recorderSurface);
-
             mCameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
@@ -653,7 +660,7 @@ class Camera2 extends CameraBase {
                 jpegSizes = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP).getOutputSizes(ImageFormat.JPEG);
             }
 
-            ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
+            final ImageReader reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
 
 
             SurfaceTexture texture = getHolder().getSurfaceTexture();
@@ -666,12 +673,10 @@ class Camera2 extends CameraBase {
             surfaces.add(previewSurface);
 
             final CaptureRequest.Builder photoPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            setupFlash(photoPreviewBuilder);
             photoPreviewBuilder.addTarget(reader.getSurface());
             photoPreviewBuilder.set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO);
 
-            int rotation = ((Activity) mContext).getWindowManager().getDefaultDisplay().getRotation();
-
-            photoPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, DEFAULT_ORIENTATIONS.get(rotation));
 
             DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
             Date today = Calendar.getInstance().getTime();
@@ -684,10 +689,10 @@ class Camera2 extends CameraBase {
                     byte[] bytes = new byte[buffer.capacity()];
                     buffer.get(bytes);
                     try {
-                        save(bytes);
+                        save(bytes, image);
                     } catch (IOException e) {
                         e.printStackTrace();
-                    }finally {
+                    } finally {
                         if (getListener() != null) {
                             PhotoEvent event = new PhotoEvent(EventType.INFO, getFile(), PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
                             getListener().onPhotoEvent(event);
@@ -695,10 +700,18 @@ class Camera2 extends CameraBase {
                     }
                 }
 
-                private void save(byte[] bytes) throws IOException {
+                private void save(byte[] bytes, Image image) throws IOException {
+                    Bitmap bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(mSensorOrientation);
+                    Bitmap rotated = Bitmap.createBitmap(bm, 0, 0, image.getWidth(), image.getHeight(), matrix, true);
+
                     try (OutputStream outputStream = new FileOutputStream(getFile())) {
-                        outputStream.write(bytes);
+                        //outputStream.write(bytes);
+                        rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
                     }
+                    bm.recycle();
+                    rotated.recycle();
                 }
             };
             reader.setOnImageAvailableListener(readOnImageAvailableListener, backgroundHandler);
@@ -706,7 +719,8 @@ class Camera2 extends CameraBase {
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
-                    startPreview(); //TODO allow user to choose
+                    stop();
+                    start(); //TODO allow user to choose
                 }
             };
 
@@ -751,6 +765,7 @@ class Camera2 extends CameraBase {
                 //handle the exception
             }
 
+            isStarted = false;
             isRecording = false;
             stopDurationTimer();
             mMediaRecorder.reset();
@@ -832,6 +847,14 @@ class Camera2 extends CameraBase {
     }
 
 
+    private void tempOffFlash(CaptureRequest.Builder builder) {
+        builder.set(CaptureRequest.FLASH_MODE, CaptureRequest.FLASH_MODE_OFF);
+    }
+
+    private void setupFlash(CaptureRequest.Builder builder) {
+        builder.set(CaptureRequest.FLASH_MODE, isFlashEnabled ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
+    }
+
     @Override
     void updatePreview() {
         if (null == mCameraDevice || null == mPreviewSession) {
@@ -867,6 +890,51 @@ class Camera2 extends CameraBase {
             stop();
             start();
         }
+    }
+
+    @Override
+    boolean hasFlash() {
+        return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+    }
+
+
+    @Override
+    void toggleFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = !isFlashEnabled;
+        if (mCameraDevice != null) {
+            start();
+        }
+    }
+
+    @Override
+    void enableFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = true;
+        if (mCameraDevice != null) {
+            start();
+        }
+    }
+
+    @Override
+    void disableFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = false;
+        if (mCameraDevice != null) {
+            start();
+        }
+
+    }
+
+    @Override
+    boolean flashEnabled() {
+        return isFlashEnabled;
     }
 
     private CamcorderProfile getCamcorderProfile(FancyCamera.Quality quality) {

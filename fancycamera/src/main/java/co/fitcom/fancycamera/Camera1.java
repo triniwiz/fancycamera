@@ -9,6 +9,7 @@ package co.fitcom.fancycamera;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
@@ -35,7 +36,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 
-public class Camera1  extends CameraBase{
+public class Camera1 extends CameraBase {
     private Semaphore semaphore = new Semaphore(1);
     private final Object lock = new Object();
     private Camera mCamera;
@@ -52,6 +53,8 @@ public class Camera1  extends CameraBase{
     private Timer mTimer;
     private TimerTask mTimerTask;
     private int mDuration = 0;
+    private boolean isFlashEnabled = false;
+
     Camera1(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
         mContext = context;
@@ -126,7 +129,7 @@ public class Camera1  extends CameraBase{
     }
 
     @Override
-    void openCamera(int width,int height) {
+    void openCamera(int width, int height) {
         try {
             setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
             backgroundHandler.post(new Runnable() {
@@ -203,36 +206,36 @@ public class Camera1  extends CameraBase{
     @Override
     void stop() {
         backgroundHandler.post(new Runnable() {
-           @Override
-           public void run() {
-               try {
-                   setPermit(semaphore.tryAcquire(1500,TimeUnit.MILLISECONDS));
-                   if (getPermit()) {
-                       synchronized (lock){
-                           if (mCamera == null) return;
-                           mCamera.stopPreview();
-                           try {
-                               mCamera.setPreviewTexture(null);
-                           } catch (IOException e) {
-                               e.printStackTrace();
-                           }
-                           mCamera.release();
-                           mCamera = null;
-                           isStarted = false;
-                       }
-                   }
-               } catch (InterruptedException e) {
-                   e.printStackTrace();
-               }finally {
-                   semaphore.release();
-               }
-           }
-       });
+            @Override
+            public void run() {
+                try {
+                    setPermit(semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS));
+                    if (getPermit()) {
+                        synchronized (lock) {
+                            if (mCamera == null) return;
+                            mCamera.stopPreview();
+                            try {
+                                mCamera.setPreviewTexture(null);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                            mCamera.release();
+                            mCamera = null;
+                            isStarted = false;
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                } finally {
+                    semaphore.release();
+                }
+            }
+        });
     }
 
     @Override
     void startRecording() {
-        if(isRecording){
+        if (isRecording) {
             return;
         }
         Camera.Parameters params = mCamera.getParameters();
@@ -247,7 +250,7 @@ public class Camera1  extends CameraBase{
         params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
         setProfile(profile);
         mCamera.setParameters(params);
-        if(mRecorder == null) {
+        if (mRecorder == null) {
             mRecorder = new MediaRecorder();
         }
         mRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
@@ -297,7 +300,7 @@ public class Camera1  extends CameraBase{
         setFile(new File(mContext.getCacheDir(), "VID_" + df.format(today) + ".mp4"));
         try {
             mPermit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
-            if(mPermit){
+            if (mPermit) {
                 mCamera.unlock();
                 try {
                     mRecorder.setCamera(mCamera);
@@ -319,14 +322,14 @@ public class Camera1  extends CameraBase{
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
-        }finally {
+        } finally {
             semaphore.release();
         }
     }
 
     @Override
     void takePhoto() {
-        if(isRecording){
+        if (isRecording) {
             return;
         }
         Camera.Parameters params = mCamera.getParameters();
@@ -344,23 +347,23 @@ public class Camera1  extends CameraBase{
         DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
         Date today = Calendar.getInstance().getTime();
         setFile(new File(mContext.getCacheDir(), "PIC_" + df.format(today) + ".jpg"));
-        mCamera.takePicture(null,null, new Camera.PictureCallback() {
+        mCamera.takePicture(null, null, new Camera.PictureCallback() {
             @Override
             public void onPictureTaken(byte[] data, Camera camera) {
                 FileOutputStream fos = null;
                 try {
                     fos = new FileOutputStream(getFile());
                     fos.write(data);
-                    if(getListener() != null){
-                        PhotoEvent event = new PhotoEvent(EventType.INFO,getFile(),PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
+                    if (getListener() != null) {
+                        PhotoEvent event = new PhotoEvent(EventType.INFO, getFile(), PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
                         getListener().onPhotoEvent(event);
                     }
                 } catch (FileNotFoundException e) {
                     e.printStackTrace();
                 } catch (IOException e) {
                     e.printStackTrace();
-                }finally {
-                    if(fos != null){
+                } finally {
+                    if (fos != null) {
                         try {
                             fos.close();
                         } catch (IOException e) {
@@ -374,12 +377,12 @@ public class Camera1  extends CameraBase{
 
     @Override
     void stopRecording() {
-        if(!isRecording){
+        if (!isRecording) {
             return;
         }
         try {
             mPermit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
-            if(mPermit){
+            if (mPermit) {
                 if (isRecording) {
                     try {
                         mRecorder.stop();
@@ -401,7 +404,7 @@ public class Camera1  extends CameraBase{
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
-        }finally {
+        } finally {
             semaphore.release();
             setPermit(false);
         }
@@ -415,8 +418,8 @@ public class Camera1  extends CameraBase{
         } else {
             setCameraPosition(FancyCamera.CameraPosition.BACK);
         }
-        openCamera(getHolder().getWidth(),getHolder().getHeight());
-       // updatePreview();
+        openCamera(getHolder().getWidth(), getHolder().getHeight());
+        // updatePreview();
     }
 
     @Override
@@ -456,7 +459,7 @@ public class Camera1  extends CameraBase{
 
     @Override
     void release() {
-        if(isRecording){
+        if (isRecording) {
             stopRecording();
         }
         stop();
@@ -474,6 +477,57 @@ public class Camera1  extends CameraBase{
         if (isStarted) {
             start();
         }
+    }
+
+
+    @Override
+    boolean hasFlash() {
+        return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+    }
+
+
+    @Override
+    void toggleFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = !isFlashEnabled;
+        if (mCamera != null) {
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setFlashMode(isFlashEnabled ? Camera.Parameters.FLASH_MODE_ON : Camera.Parameters.FLASH_MODE_OFF);
+            mCamera.setParameters(parameters);
+        }
+    }
+
+    @Override
+    void enableFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = true;
+        if (mCamera != null) {
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setFlashMode(Camera.Parameters.FLASH_MODE_ON);
+            mCamera.setParameters(parameters);
+        }
+    }
+
+    @Override
+    void disableFlash() {
+        if (!hasFlash()) {
+            return;
+        }
+        isFlashEnabled = false;
+        if (mCamera != null) {
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setFlashMode(Camera.Parameters.FLASH_MODE_OFF);
+            mCamera.setParameters(parameters);
+        }
+    }
+
+    @Override
+    boolean flashEnabled() {
+        return isFlashEnabled;
     }
 
     private void setProfile(CamcorderProfile profile) {

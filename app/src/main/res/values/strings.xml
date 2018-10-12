@@ -5,4 +5,6 @@
     <string name="toggle_camera">Toggle Camera</string>
     <string name="view_home">View Home</string>
     <string name="view_photo">View Photo</string>
+    <string name="toggle_flash">Toggle Flash</string>
+    <string name="take_photo">Take Photo</string>
 </resources>

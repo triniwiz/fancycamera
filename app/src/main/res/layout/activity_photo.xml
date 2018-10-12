@@ -27,8 +27,23 @@
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
         android:onClick="takePhoto"
-        android:text="Take Photo" />
+        android:text="@string/take_photo" />
 
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:onClick="toggleCamera"
+        android:text="@string/toggle_camera" />
+
+
+    <Button
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:onClick="toggleFlash"
+        android:text="@string/toggle_flash" />
 
     <ImageView
         android:id="@+id/imageView"

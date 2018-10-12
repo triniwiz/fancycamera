@@ -53,6 +53,8 @@ public abstract class CameraBase {
 
     abstract boolean hasCamera();
 
+    abstract boolean hasFlash();
+
     abstract boolean cameraStarted();
 
     abstract boolean cameraRecording();
@@ -76,6 +78,14 @@ public abstract class CameraBase {
     abstract void release();
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
+
+    abstract void toggleFlash();
+
+    abstract void enableFlash();
+
+    abstract void disableFlash();
+
+    abstract boolean flashEnabled();
 
     public void setTextViewListener(TextViewListener listener){
         textViewListener = listener;

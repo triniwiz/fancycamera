@@ -27,6 +27,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
+                android:onClick="toggleFlash"
+                android:text="@string/toggle_flash" />
+
+
+            <Button
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
                 android:onClick="goToVideo"
                 android:text="@string/view_home" />
 

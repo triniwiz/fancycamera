@@ -95,6 +95,10 @@ public class MainActivity extends AppCompatActivity {
         startActivity(i);
     }
 
+    public void toggleFlash(View view){
+        cameraView.toggleFlash();
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
