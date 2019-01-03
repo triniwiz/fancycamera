@@ -8,6 +8,8 @@
 package co.fitcom.fancycamera;
 
 public interface CameraEventListener {
+    void onCameraOpen();
+    void onCameraClose();
     void onPhotoEvent(PhotoEvent event);
     void onVideoEvent(VideoEvent event);
 }

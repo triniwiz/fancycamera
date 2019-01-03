@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.VideoView;
@@ -36,6 +37,16 @@ public class MainActivity extends AppCompatActivity {
         cameraView = findViewById(R.id.holder);
         cameraView.setQuality(FancyCamera.Quality.HIGHEST.getValue());
         cameraView.setListener(new CameraEventListenerUI(){
+            @Override
+            public void onCameraOpenUI() {
+                Log.d("co.fitcom.test","Camera Opened");
+            }
+
+            @Override
+            public void onCameraCloseUI() {
+                Log.d("co.fitcom.test","Camera Close");
+            }
+
             @Override
             public void onPhotoEventUI(PhotoEvent event) {
 
@@ -108,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Boolean b = cameraView.hasPermission();
+        Log.d("hasPermission",b.toString());
         if(cameraView.hasPermission()){
             cameraView.start();
         }else{

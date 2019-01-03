@@ -138,6 +138,9 @@ public class Camera1 extends CameraBase {
                     try {
                         if (getPermit()) {
                             mCamera = Camera.open(mPosition.getValue());
+                            if(listener != null){
+                                listener.onCameraOpen();
+                            }
                             updatePreview();
                         }
                     } catch (Exception e) {
@@ -222,6 +225,9 @@ public class Camera1 extends CameraBase {
                             mCamera.release();
                             mCamera = null;
                             isStarted = false;
+                            if(listener != null){
+                                listener.onCameraClose();
+                            }
                         }
                     }
                 } catch (InterruptedException e) {

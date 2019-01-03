@@ -29,6 +29,16 @@ public class Photo extends AppCompatActivity {
         cameraView.setQuality(FancyCamera.Quality.HIGHEST.getValue());
         cameraView.setListener(new CameraEventListenerUI() {
             @Override
+            public void onCameraOpenUI() {
+
+            }
+
+            @Override
+            public void onCameraCloseUI() {
+
+            }
+
+            @Override
             public void onPhotoEventUI(PhotoEvent event) {
                 if (event.getType() == EventType.INFO && event.getMessage().equals(PhotoEvent.EventInfo.PHOTO_TAKEN.toString())) {
                     Bitmap myBitmap = BitmapFactory.decodeFile(event.getFile().getAbsolutePath());

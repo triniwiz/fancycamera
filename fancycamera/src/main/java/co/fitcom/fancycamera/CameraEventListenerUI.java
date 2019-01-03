@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.util.Log;
 
 import java.io.File;
 
@@ -19,6 +20,8 @@ public abstract class CameraEventListenerUI implements CameraEventListener {
     private Handler handler;
     private static final int WHAT_PHOTO_EVENT = 0x01;
     private static final int WHAT_VIDEO_EVENT = 0x02;
+    private static final int WHAT_CAMERA_CLOSE_EVENT = 0x03;
+    private static final int WHAT_CAMERA_OPEN_EVENT = 0x04;
     private static final String MESSAGE = "message";
     private static final String TYPE = "type";
     private static final String FILE = "file";
@@ -33,7 +36,7 @@ public abstract class CameraEventListenerUI implements CameraEventListener {
                     @Override
                     public void handleMessage(Message msg) {
                         Bundle eventData = msg.getData();
-                        if (eventData == null) {
+                        if (eventData == null && (msg.what != WHAT_CAMERA_CLOSE_EVENT || msg.what != WHAT_CAMERA_OPEN_EVENT)) {
                             return;
                         }
                         EventType type = (EventType) eventData.getSerializable(TYPE);
@@ -51,6 +54,12 @@ public abstract class CameraEventListenerUI implements CameraEventListener {
                                     file = new File(eventData.getString(FILE));
                                 }
                                 onVideoEventUI(new VideoEvent(type, file, message));
+                                break;
+                            case WHAT_CAMERA_CLOSE_EVENT:
+                               onCameraCloseUI();
+                                break;
+                            case WHAT_CAMERA_OPEN_EVENT:
+                                onCameraOpenUI();
                                 break;
                         }
                     }
@@ -97,6 +106,38 @@ public abstract class CameraEventListenerUI implements CameraEventListener {
         message.setData(bundle);
         handler.sendMessage(message);
     }
+
+    @Override
+    public void onCameraClose() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onCameraCloseUI();
+            return;
+        }
+        ensureHandler();
+        Message message = handler.obtainMessage();
+        message.what = WHAT_CAMERA_CLOSE_EVENT;
+        Bundle bundle = new Bundle();
+        message.setData(bundle);
+        handler.sendMessage(message);
+    }
+
+    @Override
+    public void onCameraOpen() {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onCameraOpenUI();
+            return;
+        }
+       ensureHandler();
+        Message message = handler.obtainMessage();
+        message.what = WHAT_CAMERA_OPEN_EVENT;
+        Bundle bundle = new Bundle();
+        message.setData(bundle);
+        handler.sendMessage(message);
+    }
+
+    public abstract void onCameraOpenUI();
+
+    public abstract void onCameraCloseUI();
 
     public abstract void onPhotoEventUI(PhotoEvent event);
 

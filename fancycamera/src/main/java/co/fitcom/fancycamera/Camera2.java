@@ -258,6 +258,9 @@ class Camera2 extends CameraBase {
                         }
                         startPreview();
                         semaphore.release();
+                        if(listener != null){
+                            listener.onCameraOpen();
+                        }
                     }
 
                     @Override
@@ -266,6 +269,9 @@ class Camera2 extends CameraBase {
                         camera.close();
                         isStarted = false;
                         mCameraDevice = null;
+                        if(listener != null){
+                            listener.onCameraClose();
+                        }
                     }
 
                     @Override
@@ -274,6 +280,9 @@ class Camera2 extends CameraBase {
                         camera.close();
                         mCameraDevice = null;
                         isStarted = false;
+                        if(listener != null){
+                            listener.onCameraClose();
+                        }
                     }
                 }, backgroundHandler);
             }
@@ -864,6 +873,8 @@ class Camera2 extends CameraBase {
         try {
             mPreviewSession.setRepeatingRequest(mPreviewBuilder.build(), null, backgroundHandler);
         } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }catch (IllegalStateException e){
             e.printStackTrace();
         }
     }
