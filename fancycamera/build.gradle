@@ -3,7 +3,7 @@ apply plugin: 'com.novoda.bintray-release'
 ext {
     PUBLISH_GROUP_ID = 'co.fitcom'
     PUBLISH_ARTIFACT_ID = 'fancycamera'
-    PUBLISH_VERSION = '0.5.0'
+    PUBLISH_VERSION = '0.6.2'
 }
 
 android {
@@ -12,7 +12,6 @@ android {
 
     defaultConfig {
         minSdkVersion 17
-        targetSdkVersion COMPILE_SDK_VERSION as int
         versionCode 1
         versionName "1.0"
 
@@ -44,7 +43,7 @@ publish {
     userOrg = 'triniwiz'
     groupId = 'co.fitcom'
     artifactId = 'fancycamera'
-    publishVersion = '0.5.0'
+    publishVersion = '0.6.2'
     desc = ''
     website = ''
 }

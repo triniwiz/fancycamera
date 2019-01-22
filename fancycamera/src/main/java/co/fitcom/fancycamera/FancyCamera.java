@@ -13,15 +13,16 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
 import android.graphics.SurfaceTexture;
+import android.media.MediaRecorder;
 import android.os.Build;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.TextureView;
 
 import java.io.File;
+import java.io.IOException;
 
 
 public class FancyCamera extends TextureView implements TextureView.SurfaceTextureListener {
@@ -32,10 +33,14 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     private int mQuality = Quality.MAX_480P.getValue();
     private final Object mLock = new Object();
     private CameraEventListener listener;
-    private int VIDEO_RECORDER_PERMISSIONS_REQUEST = 868;
+    private final int VIDEO_RECORDER_PERMISSIONS_REQUEST = 868;
     private String[] VIDEO_RECORDER_PERMISSIONS = new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA};
     private boolean isReady = false;
     private CameraBase cameraBase;
+    private MediaRecorder recorder;
+    private boolean isGettingAudioLvls = false;
+    static final private double EMA_FILTER = 0.6;
+    private double mEMA = 0.0;
 
     public FancyCamera(Context context) {
         super(context);
@@ -47,7 +52,41 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         init(context, attrs);
     }
 
+    private void initListener() {
+        if (!hasPermission()) {
+            return;
+        }
+        if (recorder != null) {
+            recorder.stop();
+            recorder.release();
+            recorder = null;
+        }
+        recorder = new MediaRecorder();
+        recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+        recorder.setOutputFile("/dev/null");
+        try {
+            recorder.prepare();
+            recorder.start();
+            isGettingAudioLvls = true;
+            mEMA = 0.0;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void deInitListener(){
+        if (isGettingAudioLvls) {
+            recorder.stop();
+            recorder.release();
+            recorder = null;
+            isGettingAudioLvls = false;
+        }
+    }
+
     private void init(Context context, @Nullable AttributeSet attrs) {
+        initListener();
         if (Build.VERSION.SDK_INT >= 21) {
             cameraBase = new Camera2(getContext(), this, CameraPosition.values()[getCameraPosition()]);
         } else {
@@ -153,12 +192,16 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         cameraBase.setCameraPosition(CameraPosition.values()[position]);
     }
 
+    public void setCameraPosition(FancyCamera.CameraPosition position) {
+        cameraBase.setCameraPosition(position);
+    }
+
     public void requestPermission() {
         ActivityCompat.requestPermissions((Activity) getContext(), VIDEO_RECORDER_PERMISSIONS, VIDEO_RECORDER_PERMISSIONS_REQUEST);
     }
 
     public boolean hasPermission() {
-        if(Build.VERSION.SDK_INT < 23){
+        if (Build.VERSION.SDK_INT < 23) {
             return true;
         }
         return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) == (PackageManager.PERMISSION_GRANTED) && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == (PackageManager.PERMISSION_GRANTED);
@@ -166,22 +209,33 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     public void start() {
         cameraBase.start();
+        initListener();
     }
 
     public void stopRecording() {
         cameraBase.stopRecording();
+        initListener();
     }
 
     public void startRecording() {
+        deInitListener();
         cameraBase.startRecording();
     }
 
     public void stop() {
+        deInitListener();
         cameraBase.stop();
     }
 
     public void release() {
         cameraBase.release();
+        if (isGettingAudioLvls) {
+            recorder.stop();
+        }
+        if (recorder != null) {
+            recorder.release();
+            recorder = null;
+        }
     }
 
     @Override
@@ -254,5 +308,22 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     public void toggleCamera() {
         cameraBase.toggleCamera();
+    }
+
+    public double getAmplitude() {
+        if (cameraRecording()) {
+            return cameraBase.getRecorder() != null ? cameraBase.getRecorder().getMaxAmplitude() : 0;
+        }
+        return recorder != null ? recorder.getMaxAmplitude() : 0;
+    }
+
+    public double getDB() {
+        return 20 * Math.log10(getAmplitude() / 32767.0);
+    }
+
+    public double getAmplitudeEMA() {
+        double amp = getAmplitude();
+        mEMA = EMA_FILTER * amp + (1.0 - EMA_FILTER) * mEMA;
+        return mEMA;
     }
 }

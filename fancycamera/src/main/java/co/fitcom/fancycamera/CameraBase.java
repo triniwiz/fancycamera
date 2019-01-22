@@ -8,6 +8,7 @@
 
 package co.fitcom.fancycamera;
 
+import android.media.MediaRecorder;
 import android.view.TextureView;
 
 import java.io.File;
@@ -50,6 +51,8 @@ public abstract class CameraBase {
     int getQuality() {
         return quality;
     }
+
+    abstract MediaRecorder getRecorder();
 
     abstract boolean hasCamera();
 

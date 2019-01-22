@@ -45,7 +45,7 @@ public class Camera1 extends CameraBase {
     private Handler backgroundHandler;
     private HandlerThread backgroundHandlerThread;
     private boolean isRecording;
-    private MediaRecorder mRecorder;
+    private MediaRecorder mMediaRecorder;
     private boolean isStarted;
     private boolean autoStart;
     private boolean mPermit;
@@ -87,6 +87,10 @@ public class Camera1 extends CameraBase {
         });
     }
 
+    @Override
+    MediaRecorder getRecorder() {
+        return mMediaRecorder;
+    }
 
     @Override
     boolean hasCamera() {
@@ -256,10 +260,10 @@ public class Camera1 extends CameraBase {
         params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
         setProfile(profile);
         mCamera.setParameters(params);
-        if (mRecorder == null) {
-            mRecorder = new MediaRecorder();
+        if (mMediaRecorder == null) {
+            mMediaRecorder = new MediaRecorder();
         }
-        mRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
+        mMediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
             @Override
             public void onInfo(MediaRecorder mr, int what, int extra) {
                 if (listener != null) {
@@ -284,7 +288,7 @@ public class Camera1 extends CameraBase {
             }
         });
 
-        mRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
+        mMediaRecorder.setOnErrorListener(new MediaRecorder.OnErrorListener() {
             @Override
             public void onError(MediaRecorder mr, int what, int extra) {
                 if (listener != null) {
@@ -309,13 +313,13 @@ public class Camera1 extends CameraBase {
             if (mPermit) {
                 mCamera.unlock();
                 try {
-                    mRecorder.setCamera(mCamera);
-                    mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-                    mRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-                    mRecorder.setProfile(getProfile());
-                    mRecorder.setOutputFile(getFile().getPath());
-                    mRecorder.prepare();
-                    mRecorder.start();
+                    mMediaRecorder.setCamera(mCamera);
+                    mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                    mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
+                    mMediaRecorder.setProfile(getProfile());
+                    mMediaRecorder.setOutputFile(getFile().getPath());
+                    mMediaRecorder.prepare();
+                    mMediaRecorder.start();
                     isRecording = true;
                     startDurationTimer();
                 } catch (Exception e) {
@@ -391,11 +395,11 @@ public class Camera1 extends CameraBase {
             if (mPermit) {
                 if (isRecording) {
                     try {
-                        mRecorder.stop();
+                        mMediaRecorder.stop();
                         stopDurationTimer();
-                        mRecorder.reset();
-                        mRecorder.release();
-                        mRecorder = null;
+                        mMediaRecorder.reset();
+                        mMediaRecorder.release();
+                        mMediaRecorder = null;
                         if (listener != null) {
                             listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
                         }

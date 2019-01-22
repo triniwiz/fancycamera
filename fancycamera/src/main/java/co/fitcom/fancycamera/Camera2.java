@@ -68,7 +68,7 @@ import java.util.concurrent.TimeUnit;
 class Camera2 extends CameraBase {
     private static final Object lock = new Object();
     private CameraManager mManager;
-    private MediaRecorder mMediaRecorder;
+    MediaRecorder mMediaRecorder;
     private FancyCamera.CameraPosition mPosition;
     private Context mContext;
     private Handler backgroundHandler;
@@ -294,6 +294,11 @@ class Camera2 extends CameraBase {
 
     }
 
+
+    @Override
+    MediaRecorder getRecorder() {
+        return mMediaRecorder;
+    }
 
     private void setUpCaptureRequestBuilder(CaptureRequest.Builder builder) {
         builder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
@@ -603,7 +608,7 @@ class Camera2 extends CameraBase {
             SurfaceTexture texture = getHolder().getSurfaceTexture();
             assert texture != null;
             texture.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
-            mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_RECORD);
+            mPreviewBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             setupFlash(mPreviewBuilder);
             List<Surface> surfaces = new ArrayList<>();
             Surface previewSurface = new Surface(texture);
