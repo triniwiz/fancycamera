@@ -895,16 +895,15 @@ class Camera2 extends CameraBase {
 
     @Override
     void setCameraPosition(FancyCamera.CameraPosition position) {
-        if (position != mPosition) {
-            synchronized (lock) {
+        synchronized (lock) {
+            if (position != mPosition) {
                 mPosition = position;
-
+                if (null == mCameraDevice) {
+                    return;
+                }
+                stop();
+                start();
             }
-            if (null == mCameraDevice) {
-                return;
-            }
-            stop();
-            start();
         }
     }
 
