@@ -76,7 +76,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         }
     }
 
-    public void deInitListener(){
+    public void deInitListener() {
         if (isGettingAudioLvls) {
             recorder.stop();
             recorder.release();
@@ -103,7 +103,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
                 mQuality = a.getInteger(R.styleable.FancyCamera_quality, Quality.MAX_480P.getValue());
                 setQuality(mQuality);
                 mCameraPosition = a.getInteger(R.styleable.FancyCamera_cameraPosition, 0);
-                cameraBase.setCameraPosition(CameraPosition.values()[mCameraPosition]);
+                setCameraPosition(mCameraPosition);
             } finally {
                 a.recycle();
             }
@@ -297,7 +297,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         FRONT(1);
         private int value;
 
-        private CameraPosition(int value) {
+        CameraPosition(int value) {
             this.value = value;
         }
 
@@ -311,10 +311,17 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     public double getAmplitude() {
+        double amp;
         if (cameraRecording()) {
-            return cameraBase.getRecorder() != null ? cameraBase.getRecorder().getMaxAmplitude() : 0;
+            amp = cameraBase.getRecorder() != null ? cameraBase.getRecorder().getMaxAmplitude() : 0;
+            return amp;
         }
-        return recorder != null ? recorder.getMaxAmplitude() : 0;
+        try {
+            amp = recorder != null ? recorder.getMaxAmplitude() : 0;
+        } catch (Exception ignored) {
+            amp = 0;
+        }
+        return amp;
     }
 
     public double getDB() {
