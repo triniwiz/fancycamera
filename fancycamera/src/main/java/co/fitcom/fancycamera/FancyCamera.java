@@ -41,6 +41,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     private boolean isGettingAudioLvls = false;
     static final private double EMA_FILTER = 0.6;
     private double mEMA = 0.0;
+    private CameraEventListener internalListener;
 
     public FancyCamera(Context context) {
         super(context);
@@ -56,11 +57,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         if (!hasPermission()) {
             return;
         }
-        if (recorder != null) {
-            recorder.stop();
-            recorder.release();
-            recorder = null;
-        }
+        if (recorder != null) deInitListener();
         recorder = new MediaRecorder();
         recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
@@ -78,20 +75,58 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     public void deInitListener() {
         if (isGettingAudioLvls) {
-            recorder.stop();
-            recorder.release();
-            recorder = null;
-            isGettingAudioLvls = false;
+            try {
+                recorder.stop();
+                recorder.release();
+                recorder = null;
+                isGettingAudioLvls = false;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
     private void init(Context context, @Nullable AttributeSet attrs) {
-        initListener();
         if (Build.VERSION.SDK_INT >= 21) {
             cameraBase = new Camera2(getContext(), this, CameraPosition.values()[getCameraPosition()]);
         } else {
             cameraBase = new Camera1(getContext(), this, CameraPosition.values()[getCameraPosition()]);
         }
+
+        internalListener = new CameraEventListener() {
+            @Override
+            public void onCameraOpen() {
+                initListener();
+                if (listener != null) {
+                    listener.onCameraOpen();
+                }
+            }
+
+            @Override
+            public void onCameraClose() {
+                deInitListener();
+                if (listener != null) {
+                    listener.onCameraClose();
+                }
+            }
+
+            @Override
+            public void onPhotoEvent(PhotoEvent event) {
+                if (listener != null) {
+                    listener.onPhotoEvent(event);
+                }
+            }
+
+            @Override
+            public void onVideoEvent(VideoEvent event) {
+                if (listener != null) {
+                    listener.onVideoEvent(event);
+                }
+            }
+        };
+
+        cameraBase.setListener(internalListener);
+
         if (attrs != null) {
             TypedArray a = context.obtainStyledAttributes(
                     attrs,
@@ -185,7 +220,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     public void setListener(CameraEventListener listener) {
-        cameraBase.setListener(listener);
+        this.listener = listener;
     }
 
     public void setCameraPosition(int position) {
@@ -209,12 +244,10 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     public void start() {
         cameraBase.start();
-        initListener();
     }
 
     public void stopRecording() {
         cameraBase.stopRecording();
-        initListener();
     }
 
     public void startRecording() {
@@ -223,19 +256,12 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     public void stop() {
-        deInitListener();
         cameraBase.stop();
     }
 
     public void release() {
         cameraBase.release();
-        if (isGettingAudioLvls) {
-            recorder.stop();
-        }
-        if (recorder != null) {
-            recorder.release();
-            recorder = null;
-        }
+        deInitListener();
     }
 
     @Override

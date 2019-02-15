@@ -124,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
         if (timerTask != null) {
             timerTask.cancel();
         }
+        timerTask = null;
+        levelsTask = null;
     }
 
     void start() {
