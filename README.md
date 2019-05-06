@@ -40,6 +40,7 @@ compile 'co.fitcom:fancycamera:0.0.1'
 | getDuration()           |         | int     | Get the current recording video duration.             |
 | hasCamera()             |         | boolean | Checks if there are any camera available.             |
 | setCameraPosition()     |         | void    | Sets camera position front/back                       |
+| setCameraOrientation()  |         | void    | Used to force an orientation in the output file       |
 
 # TODO
 

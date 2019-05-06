@@ -30,6 +30,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     private boolean mSaveToGallery = false;
     private boolean isStarted = false;
     private int mCameraPosition = 0;
+    private int mCameraOrientation = 0;
     private int mQuality = Quality.MAX_480P.getValue();
     private final Object mLock = new Object();
     private CameraEventListener listener;
@@ -88,7 +89,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     private void init(Context context, @Nullable AttributeSet attrs) {
         if (Build.VERSION.SDK_INT >= 21) {
-            cameraBase = new Camera2(getContext(), this, CameraPosition.values()[getCameraPosition()]);
+            cameraBase = new Camera2(getContext(), this, CameraPosition.values()[getCameraPosition()], CameraOrientation.values()[getCameraOrientation()]);
         } else {
             cameraBase = new Camera1(getContext(), this, CameraPosition.values()[getCameraPosition()]);
         }
@@ -139,6 +140,8 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
                 setQuality(mQuality);
                 mCameraPosition = a.getInteger(R.styleable.FancyCamera_cameraPosition, 0);
                 setCameraPosition(mCameraPosition);
+                mCameraOrientation = a.getInteger(R.styleable.FancyCamera_cameraOrientation, 0);
+                setCameraOrientation(mCameraOrientation);
             } finally {
                 a.recycle();
             }
@@ -186,6 +189,10 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         return mCameraPosition;
     }
 
+    public int getCameraOrientation() {
+        return mCameraOrientation;
+    }
+
     public int getDuration() {
         return cameraBase.getDuration();
     }
@@ -229,6 +236,14 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
     public void setCameraPosition(FancyCamera.CameraPosition position) {
         cameraBase.setCameraPosition(position);
+    }
+
+    public void setCameraOrientation(int orientation) {
+        cameraBase.setCameraOrientation(CameraOrientation.values()[orientation]);
+    }
+
+    public void setCameraOrientation(FancyCamera.CameraOrientation orientation) {
+        cameraBase.setCameraOrientation(orientation);
     }
 
     public void requestPermission() {
@@ -310,6 +325,23 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         private int value;
 
         private Quality(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
+
+    public enum CameraOrientation {
+        UNKNOWN(0),
+        PORTRAIT(1),
+        PORTRAIT_UPSIDE_DOWN(2),
+        LANDSCAPE_LEFT(3),
+        LANDSCAPE_RIGHT(4);
+        private int value;
+
+        CameraOrientation(int value) {
             this.value = value;
         }
 
