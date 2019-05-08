@@ -157,6 +157,10 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         return cameraBase.getFile();
     }
 
+    public boolean hasFlash() {
+        return cameraBase.hasFlash();
+    }
+
     public void toggleFlash() {
         cameraBase.toggleFlash();
     }
