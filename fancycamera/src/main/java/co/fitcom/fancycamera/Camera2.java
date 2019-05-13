@@ -68,6 +68,7 @@ class Camera2 extends CameraBase {
     private CameraManager mManager;
     MediaRecorder mMediaRecorder;
     private FancyCamera.CameraPosition mPosition;
+    private FancyCamera.CameraOrientation mOrientation;
     private Context mContext;
     private Handler backgroundHandler;
     private HandlerThread backgroundHandlerThread;
@@ -90,13 +91,21 @@ class Camera2 extends CameraBase {
     boolean mAutoFocus;
 
 
-    Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
+    Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position, @Nullable FancyCamera.CameraOrientation orientation) {
         super(textureView);
+
         if (position == null) {
             mPosition = FancyCamera.CameraPosition.BACK;
         } else {
             mPosition = position;
         }
+
+        if (orientation == null) {
+            mOrientation = FancyCamera.CameraOrientation.UNKNOWN;
+        } else {
+            mOrientation = orientation;
+        }
+        
         mContext = context;
         startBackgroundThread();
 
@@ -366,28 +375,44 @@ class Camera2 extends CameraBase {
                     }
 
                 });
-                int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
 
-                int orientation = activity.getResources().getConfiguration().orientation;
+                if (mOrientation == null || mOrientation == FancyCamera.CameraOrientation.UNKNOWN) {
+                    int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
 
-                if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-                    if (mSensorOrientation != null) {
-                        switch (mSensorOrientation) {
-                            case SENSOR_ORIENTATION_DEFAULT_DEGREES:
-                                mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
-                                break;
-                            case SENSOR_ORIENTATION_INVERSE_DEGREES:
-                                mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
-                                break;
+                    int orientation = activity.getResources().getConfiguration().orientation;
+
+                    if (orientation == Configuration.ORIENTATION_PORTRAIT) {
+                        if (mSensorOrientation != null) {
+                            switch (mSensorOrientation) {
+                                case SENSOR_ORIENTATION_DEFAULT_DEGREES:
+                                    mMediaRecorder.setOrientationHint(DEFAULT_ORIENTATIONS.get(rotation));
+                                    break;
+                                case SENSOR_ORIENTATION_INVERSE_DEGREES:
+                                    mMediaRecorder.setOrientationHint(INVERSE_ORIENTATIONS.get(rotation));
+                                    break;
+                            }
                         }
+                    } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_90 == rotation) {
+                        mMediaRecorder.setOrientationHint(0);
+                    } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_270 == rotation) {
+                        mMediaRecorder.setOrientationHint(0);
                     }
-                } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_90 == rotation) {
-                    mMediaRecorder.setOrientationHint(0);
-                } else if (orientation == Configuration.ORIENTATION_LANDSCAPE && Surface.ROTATION_270 == rotation) {
-                    mMediaRecorder.setOrientationHint(0);
+                } else {
+                    switch (mOrientation) {
+                        case PORTRAIT_UPSIDE_DOWN:
+                            mMediaRecorder.setOrientationHint(270);
+                            break;
+                        case LANDSCAPE_LEFT:
+                            mMediaRecorder.setOrientationHint(0);
+                            break;
+                        case LANDSCAPE_RIGHT:
+                            mMediaRecorder.setOrientationHint(180);
+                            break;
+                        default:
+                            mMediaRecorder.setOrientationHint(90);
+                            break;
+                    }
                 }
-
-
                 mMediaRecorder.prepare();
             }
         } catch (InterruptedException e) {
@@ -903,6 +928,11 @@ class Camera2 extends CameraBase {
                 start();
             }
         }
+    }
+
+    @Override
+    void setCameraOrientation(FancyCamera.CameraOrientation orientation) {
+        mOrientation = orientation;
     }
 
     @Override

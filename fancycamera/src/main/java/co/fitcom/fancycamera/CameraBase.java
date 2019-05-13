@@ -81,6 +81,7 @@ public abstract class CameraBase {
     abstract void release();
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
+    abstract void setCameraOrientation(FancyCamera.CameraOrientation orientation);
 
     abstract void toggleFlash();
 

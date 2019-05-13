@@ -42,6 +42,7 @@ public class Camera1 extends CameraBase {
     private Camera mCamera;
     private Context mContext;
     private FancyCamera.CameraPosition mPosition;
+    private FancyCamera.CameraOrientation mOrientation;
     private Handler backgroundHandler;
     private HandlerThread backgroundHandlerThread;
     private boolean isRecording;
@@ -487,6 +488,11 @@ public class Camera1 extends CameraBase {
         if (isStarted) {
             start();
         }
+    }
+    
+    @Override
+    void setCameraOrientation(FancyCamera.CameraOrientation orientation) {
+        mOrientation = orientation;
     }
 
 

@@ -16,5 +16,12 @@
             <enum name="back" value="0" />
             <enum name="front" value="1" />
         </attr>
+        <attr name="cameraOrientation" format="enum">
+            <enum name="unknown" value="0" />
+            <enum name="portrait" value="1" />
+            <enum name="portraitUpsideDown" value="2" />
+            <enum name="landscapeLeft" value="3" />
+            <enum name="landscapeRight" value="4" />
+        </attr>
     </declare-styleable>
 </resources>
