@@ -1093,14 +1093,20 @@ class Camera2 extends CameraBase {
             RectF bufferRect = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());
             float centerX = viewRect.centerX();
             float centerY = viewRect.centerY();
+
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+            float scale = Math.max(
+                    (float) viewHeight / previewSize.getHeight(),
+                    (float) viewWidth / previewSize.getWidth());
+            matrix.postScale(scale, scale, centerX, centerY);
+            
             if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-                bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-                matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-                float scale = Math.max(
-                        (float) viewHeight / previewSize.getHeight(),
-                        (float) viewWidth / previewSize.getWidth());
-                matrix.postScale(scale, scale, centerX, centerY);
                 matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+            } else if (Surface.ROTATION_180 == rotation) {
+                matrix.postRotate(180, centerX, centerY);
+            } else {
+                matrix.postRotate(0, centerX, centerY);
             }
             getHolder().setTransform(matrix);
         }
