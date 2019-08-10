@@ -15,11 +15,14 @@ import android.content.res.TypedArray;
 import android.graphics.SurfaceTexture;
 import android.media.MediaRecorder;
 import android.os.Build;
-import android.support.annotation.Nullable;
-import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
+
+import androidx.annotation.Nullable;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+
 import android.util.AttributeSet;
 import android.view.TextureView;
+import android.view.ViewGroup;
 
 import java.io.File;
 import java.io.IOException;
@@ -27,7 +30,6 @@ import java.io.IOException;
 
 public class FancyCamera extends TextureView implements TextureView.SurfaceTextureListener {
     private boolean mFlashEnabled = false;
-    private boolean mSaveToGallery = false;
     private boolean isStarted = false;
     private int mCameraPosition = 0;
     private int mCameraOrientation = 0;
@@ -135,18 +137,51 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
 
             try {
                 mFlashEnabled = a.getBoolean(R.styleable.FancyCamera_enableFlash, false);
-                mSaveToGallery = a.getBoolean(R.styleable.FancyCamera_saveToGallery, false);
+                setSaveToGallery(a.getBoolean(R.styleable.FancyCamera_saveToGallery, false));
                 mQuality = a.getInteger(R.styleable.FancyCamera_quality, Quality.MAX_480P.getValue());
                 setQuality(mQuality);
                 mCameraPosition = a.getInteger(R.styleable.FancyCamera_cameraPosition, 0);
                 setCameraPosition(mCameraPosition);
                 mCameraOrientation = a.getInteger(R.styleable.FancyCamera_cameraOrientation, 0);
                 setCameraOrientation(mCameraOrientation);
+                setDisableHEVC(a.getBoolean(R.styleable.FancyCamera_disableHEVC, false));
+                setMaxAudioBitRate(a.getInteger(R.styleable.FancyCamera_maxAudioBitRate, -1));
+                setMaxVideoBitrate(a.getInteger(R.styleable.FancyCamera_maxVideoBitrate, -1));
+                setMaxVideoFrameRate(a.getInteger(R.styleable.FancyCamera_maxVideoFrameRate, -1));
+
             } finally {
                 a.recycle();
             }
         }
         this.setSurfaceTextureListener(this);
+    }
+
+    public int getNumberOfCameras() {
+        return cameraBase.getNumberOfCameras();
+    }
+
+    boolean getAutoSquareCrop() {
+        return cameraBase.getAutoSquareCrop();
+    }
+
+    public void setAutoSquareCrop(boolean autoSquareCrop) {
+        cameraBase.setAutoSquareCrop(autoSquareCrop);
+    }
+
+    public boolean getAutoFocus() {
+        return cameraBase.getAutoFocus();
+    }
+
+    public void setAutoFocus(boolean focus) {
+        cameraBase.setAutoFocus(focus);
+    }
+
+    public boolean getSaveToGallery() {
+        return cameraBase.getSaveToGallery();
+    }
+
+    public void setSaveToGallery(boolean saveToGallery) {
+        cameraBase.setSaveToGallery(saveToGallery);
     }
 
     public void setFile(File file) {
@@ -259,6 +294,14 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
             return true;
         }
         return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.CAMERA) == (PackageManager.PERMISSION_GRANTED) && ContextCompat.checkSelfPermission(getContext(), Manifest.permission.RECORD_AUDIO) == (PackageManager.PERMISSION_GRANTED);
+    }
+
+    public boolean hasStoragePermission() {
+        return cameraBase.hasStoragePermission();
+    }
+
+    public void requestStoragePermission() {
+        cameraBase.requestStoragePermission();
     }
 
     public void start() {
@@ -394,5 +437,41 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         double amp = getAmplitude();
         mEMA = EMA_FILTER * amp + (1.0 - EMA_FILTER) * mEMA;
         return mEMA;
+    }
+
+    public int getMaxAudioBitRate() {
+        return cameraBase.getMaxAudioBitRate();
+    }
+
+
+    public int getMaxVideoBitrate() {
+        return cameraBase.getMaxVideoBitrate();
+    }
+
+
+    public int getMaxVideoFrameRate() {
+        return cameraBase.getMaxVideoFrameRate();
+    }
+
+
+    public boolean getDisableHEVC() {
+        return cameraBase.getDisableHEVC();
+    }
+
+
+    public void setDisableHEVC(boolean disableHEVC) {
+        cameraBase.setDisableHEVC(disableHEVC);
+    }
+
+    public void setMaxAudioBitRate(int maxAudioBitRate) {
+        cameraBase.setMaxAudioBitRate(maxAudioBitRate);
+    }
+
+    public void setMaxVideoBitrate(int maxVideoBitrate) {
+        cameraBase.setMaxVideoBitrate(maxVideoBitrate);
+    }
+
+    public void setMaxVideoFrameRate(int maxVideoFrameRate) {
+        cameraBase.setMaxVideoFrameRate(maxVideoFrameRate);
     }
 }

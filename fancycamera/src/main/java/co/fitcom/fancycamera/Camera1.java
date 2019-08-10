@@ -9,14 +9,20 @@ package co.fitcom.fancycamera;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.CamcorderProfile;
+import android.media.CameraProfile;
 import android.media.MediaRecorder;
+import android.net.Uri;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.support.annotation.Nullable;
+
+import androidx.annotation.Nullable;
+
 import android.view.Surface;
 import android.view.TextureView;
 
@@ -55,6 +61,13 @@ public class Camera1 extends CameraBase {
     private TimerTask mTimerTask;
     private int mDuration = 0;
     private boolean isFlashEnabled = false;
+    private boolean mAutoFocus = false;
+    private boolean disableHEVC = false;
+    private int maxVideoBitrate = -1;
+    private int maxAudioBitRate = -1;
+    private int maxVideoFrameRate = -1;
+    private boolean saveToGallery = false;
+    private boolean autoSquareCrop = false;
 
     Camera1(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
@@ -91,6 +104,81 @@ public class Camera1 extends CameraBase {
     @Override
     MediaRecorder getRecorder() {
         return mMediaRecorder;
+    }
+
+    @Override
+    boolean getAutoSquareCrop() {
+        return autoSquareCrop;
+    }
+
+    @Override
+    public void setAutoSquareCrop(boolean autoSquareCrop) {
+        this.autoSquareCrop = autoSquareCrop;
+    }
+
+    @Override
+    public boolean getAutoFocus() {
+        return mAutoFocus;
+    }
+
+    @Override
+    public void setAutoFocus(boolean focus) {
+        mAutoFocus = focus;
+    }
+
+    @Override
+    public boolean getSaveToGallery() {
+        return saveToGallery;
+    }
+
+    @Override
+    public void setSaveToGallery(boolean saveToGallery) {
+        this.saveToGallery = saveToGallery;
+    }
+
+    @Override
+    public int getMaxAudioBitRate() {
+        return maxAudioBitRate;
+    }
+
+    @Override
+    public int getMaxVideoBitrate() {
+        return maxVideoBitrate;
+    }
+
+    @Override
+    public int getMaxVideoFrameRate() {
+        return maxVideoFrameRate;
+    }
+
+    @Override
+    public boolean getDisableHEVC() {
+        return disableHEVC;
+    }
+
+    @Override
+    public void setDisableHEVC(boolean disableHEVC) {
+        this.disableHEVC = disableHEVC;
+    }
+
+    @Override
+    public void setMaxAudioBitRate(int maxAudioBitRate) {
+        this.maxAudioBitRate = maxAudioBitRate;
+    }
+
+    @Override
+    public void setMaxVideoBitrate(int maxVideoBitrate) {
+        this.maxVideoBitrate = maxVideoBitrate;
+    }
+
+    @Override
+    public void setMaxVideoFrameRate(int maxVideoFrameRate) {
+        this.maxVideoFrameRate = maxVideoFrameRate;
+    }
+
+    @Override
+    public int getNumberOfCameras() {
+        return Camera.getNumberOfCameras();
     }
 
     @Override
@@ -143,7 +231,7 @@ public class Camera1 extends CameraBase {
                     try {
                         if (getPermit()) {
                             mCamera = Camera.open(mPosition.getValue());
-                            if(listener != null){
+                            if (listener != null) {
                                 listener.onCameraOpen();
                             }
                             updatePreview();
@@ -230,7 +318,7 @@ public class Camera1 extends CameraBase {
                             mCamera.release();
                             mCamera = null;
                             isStarted = false;
-                            if(listener != null){
+                            if (listener != null) {
                                 listener.onCameraClose();
                             }
                         }
@@ -259,6 +347,20 @@ public class Camera1 extends CameraBase {
         profile.videoFrameWidth = optimalSize.width;
         profile.videoFrameHeight = optimalSize.height;
         params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
+        if (getAutoFocus()) {
+            List<String> supportedFocusModes = params.getSupportedFocusModes();
+            if (supportedFocusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)) {
+                params.setFocusMode(android.hardware.Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+            } else if (supportedFocusModes.contains(android.hardware.Camera.Parameters.FOCUS_MODE_AUTO)) {
+                params.setFocusMode(android.hardware.Camera.Parameters.FOCUS_MODE_AUTO);
+            }
+        } else {
+            List<String> supportedFocusModes = params.getSupportedFocusModes();
+            if (supportedFocusModes.contains(android.hardware.Camera.Parameters.FOCUS_MODE_FIXED)) {
+                params.setFocusMode(android.hardware.Camera.Parameters.FOCUS_MODE_FIXED);
+            }
+        }
+
         setProfile(profile);
         mCamera.setParameters(params);
         if (mMediaRecorder == null) {
@@ -308,16 +410,45 @@ public class Camera1 extends CameraBase {
 
         DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
         Date today = Calendar.getInstance().getTime();
-        setFile(new File(mContext.getCacheDir(), "VID_" + df.format(today) + ".mp4"));
+        if (getSaveToGallery()) {
+            File cameraDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+            if (!cameraDir.exists()) {
+                final boolean mkdirs = cameraDir.mkdirs();
+            }
+            setFile(new File(cameraDir, "VID_" + df.format(today) + ".mp4"));
+        } else {
+            setFile(new File(mContext.getExternalFilesDir(null), "VID_" + df.format(today) + ".mp4"));
+        }
         try {
             mPermit = semaphore.tryAcquire(1500, TimeUnit.MILLISECONDS);
             if (mPermit) {
                 mCamera.unlock();
                 try {
+                    CamcorderProfile camcorderProfile = getProfile();
                     mMediaRecorder.setCamera(mCamera);
                     mMediaRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
                     mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
-                    mMediaRecorder.setProfile(getProfile());
+                    mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+                    mMediaRecorder.setVideoSize(camcorderProfile.videoFrameWidth, camcorderProfile.videoFrameHeight);
+                    mMediaRecorder.setAudioChannels(camcorderProfile.audioChannels);
+                    int videoBitRate = camcorderProfile.videoBitRate;
+                    int maxVideoBitrate = camcorderProfile.videoBitRate;
+                    if (this.maxVideoBitrate > -1) {
+                        maxVideoBitrate = this.maxVideoBitrate;
+                    }
+                    int maxVideoFrameRate = camcorderProfile.videoFrameRate;
+                    if (this.maxVideoFrameRate > -1) {
+                        maxVideoFrameRate = this.maxVideoFrameRate;
+                    }
+                    int maxAudioBitRate = camcorderProfile.audioBitRate;
+                    if (this.maxAudioBitRate > -1) {
+                        maxAudioBitRate = this.maxAudioBitRate;
+                    }
+                    mMediaRecorder.setVideoFrameRate(Math.min(camcorderProfile.videoFrameRate, maxVideoFrameRate));
+                    mMediaRecorder.setVideoEncodingBitRate(Math.min(videoBitRate, maxVideoBitrate));
+                    mMediaRecorder.setAudioEncodingBitRate(Math.min(camcorderProfile.audioBitRate, maxAudioBitRate));
+                    mMediaRecorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264);
+                    mMediaRecorder.setAudioEncoder(camcorderProfile.audioCodec);
                     mMediaRecorder.setOutputFile(getFile().getPath());
                     mMediaRecorder.prepare();
                     mMediaRecorder.start();
@@ -350,14 +481,38 @@ public class Camera1 extends CameraBase {
         Camera.Size optimalSize = getOptimalVideoSize(mSupportedVideoSizes,
                 mSupportedPreviewSizes, getHolder().getWidth(), getHolder().getHeight());
 
-        profile.videoFrameWidth = optimalSize.width;
-        profile.videoFrameHeight = optimalSize.height;
+        int width = optimalSize.width;
+        int height = optimalSize.height;
+        if (getAutoSquareCrop()) {
+            int offsetWidth;
+            int offsetHeight;
+            if (width < height) {
+                offsetHeight = (height - width) / 2;
+                height = width - offsetHeight;
+            } else {
+                offsetWidth = (width - height) / 2;
+                width = height - offsetWidth;
+            }
+        }
+
+        profile.videoFrameWidth = width;
+        profile.videoFrameHeight = height;
+
+
         params.setPreviewSize(profile.videoFrameWidth, profile.videoFrameHeight);
         setProfile(profile);
         mCamera.setParameters(params);
         DateFormat df = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US);
         Date today = Calendar.getInstance().getTime();
-        setFile(new File(mContext.getCacheDir(), "PIC_" + df.format(today) + ".jpg"));
+        if (getSaveToGallery()) {
+            File cameraDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+            if (!cameraDir.exists()) {
+                final boolean mkdirs = cameraDir.mkdirs();
+            }
+            setFile(new File(cameraDir, "PIC_" + df.format(today) + ".jpg"));
+        } else {
+            setFile(new File(mContext.getExternalFilesDir(null), "PIC_" + df.format(today) + ".jpg"));
+        }
         mCamera.takePicture(null, null, new Camera.PictureCallback() {
             @Override
             public void onPictureTaken(byte[] data, Camera camera) {
@@ -365,6 +520,12 @@ public class Camera1 extends CameraBase {
                 try {
                     fos = new FileOutputStream(getFile());
                     fos.write(data);
+                    Uri contentUri = Uri.fromFile(getFile());
+                    Intent mediaScanIntent = new android.content.Intent(
+                            "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                            contentUri
+                    );
+                    mContext.sendBroadcast(mediaScanIntent);
                     if (getListener() != null) {
                         PhotoEvent event = new PhotoEvent(EventType.INFO, getFile(), PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
                         getListener().onPhotoEvent(event);
@@ -401,6 +562,12 @@ public class Camera1 extends CameraBase {
                         mMediaRecorder.reset();
                         mMediaRecorder.release();
                         mMediaRecorder = null;
+                        Uri contentUri = Uri.fromFile(getFile());
+                        Intent mediaScanIntent = new android.content.Intent(
+                                "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                                contentUri
+                        );
+                        mContext.sendBroadcast(mediaScanIntent);
                         if (listener != null) {
                             listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
                         }
@@ -489,7 +656,7 @@ public class Camera1 extends CameraBase {
             start();
         }
     }
-    
+
     @Override
     void setCameraOrientation(FancyCamera.CameraOrientation orientation) {
         mOrientation = orientation;
@@ -498,7 +665,19 @@ public class Camera1 extends CameraBase {
 
     @Override
     boolean hasFlash() {
-        return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+        if (mCamera != null) {
+            Camera.Parameters parameters = mCamera.getParameters();
+            boolean hasFlash = false;
+            for (String mode : parameters.getSupportedFlashModes()) {
+                if (mode.equals("on") || mode.equals("auto")) {
+                    hasFlash = true;
+                    break;
+                }
+            }
+            return hasFlash;
+        }
+
+        return false;
     }
 
 

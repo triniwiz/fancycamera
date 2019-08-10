@@ -8,8 +8,16 @@
 
 package co.fitcom.fancycamera;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.media.MediaRecorder;
+import android.os.Build;
 import android.view.TextureView;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import java.io.File;
 import java.util.Timer;
@@ -52,7 +60,37 @@ public abstract class CameraBase {
         return quality;
     }
 
+    abstract boolean getAutoSquareCrop();
+
+    abstract void setAutoSquareCrop(boolean crop);
+
     abstract MediaRecorder getRecorder();
+
+    abstract boolean getSaveToGallery();
+
+    abstract public void setSaveToGallery(boolean saveToGallery);
+
+    abstract public boolean getAutoFocus();
+
+    abstract public void setAutoFocus(boolean focus);
+
+    abstract int getMaxAudioBitRate();
+
+    abstract int getMaxVideoBitrate();
+
+    abstract int getMaxVideoFrameRate();
+
+    abstract public boolean getDisableHEVC();
+
+    abstract public void setDisableHEVC(boolean disableHEVC);
+
+    abstract public void setMaxAudioBitRate(int maxAudioBitRate);
+
+    abstract public void setMaxVideoBitrate(int maxVideoBitrate);
+
+    abstract public void setMaxVideoFrameRate(int maxVideoFrameRate);
+
+    abstract public int getNumberOfCameras();
 
     abstract boolean hasCamera();
 
@@ -81,6 +119,7 @@ public abstract class CameraBase {
     abstract void release();
 
     abstract void setCameraPosition(FancyCamera.CameraPosition position);
+
     abstract void setCameraOrientation(FancyCamera.CameraOrientation orientation);
 
     abstract void toggleFlash();
@@ -91,13 +130,14 @@ public abstract class CameraBase {
 
     abstract boolean flashEnabled();
 
-    public void setTextViewListener(TextViewListener listener){
+    public void setTextViewListener(TextViewListener listener) {
         textViewListener = listener;
     }
 
-    public TextViewListener getTextViewListener(){
+    public TextViewListener getTextViewListener() {
         return textViewListener;
     }
+
     public CameraEventListener getListener() {
         return listener;
     }
@@ -125,6 +165,17 @@ public abstract class CameraBase {
 
     int getDuration() {
         return mDuration;
+    }
+
+    public boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT < 23) {
+            return true;
+        }
+        return ContextCompat.checkSelfPermission(holder.getContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE) == (PackageManager.PERMISSION_GRANTED);
+    }
+
+    public void requestStoragePermission() {
+        ActivityCompat.requestPermissions((Activity) holder.getContext(), new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 868);
     }
 
 }

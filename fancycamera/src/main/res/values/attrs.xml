@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <declare-styleable name="FancyCamera">
-        <attr name="enableFlash" format="boolean"/>
-        <attr name="saveToGallery" format="boolean"/>
+        <attr name="enableFlash" format="boolean" />
+        <attr name="saveToGallery" format="boolean" />
         <attr name="quality" format="enum">
             <enum name="max480p" value="0" />
             <enum name="max720p" value="1" />
@@ -23,5 +23,9 @@
             <enum name="landscapeLeft" value="3" />
             <enum name="landscapeRight" value="4" />
         </attr>
+        <attr name="disableHEVC" format="boolean" />
+        <attr name="maxVideoBitrate" format="integer" />
+        <attr name="maxAudioBitRate" format="integer" />
+        <attr name="maxVideoFrameRate" format="integer" />
     </declare-styleable>
 </resources>
