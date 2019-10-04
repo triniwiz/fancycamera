@@ -1040,15 +1040,19 @@ class Camera2 extends CameraBase {
             }
 
             try {
-                mPreviewSession.stopRepeating();
-                mPreviewSession.abortCaptures();
+                if(mPreviewSession != null) {
+                    mPreviewSession.stopRepeating();
+                    mPreviewSession.abortCaptures();
+                }
             } catch (CameraAccessException e) {
                 e.printStackTrace();
             }
 
 
             try {
-                mMediaRecorder.stop();
+                if(mMediaRecorder != null) {
+                    mMediaRecorder.stop();
+                }
             } catch (RuntimeException e) {
                 //handle the exception
             }
@@ -1056,15 +1060,23 @@ class Camera2 extends CameraBase {
             isStarted = false;
             isRecording = false;
             stopDurationTimer();
-            mMediaRecorder.reset();
-            mMediaRecorder.release();
+
+            if (mMediaRecorder != null) {
+                mMediaRecorder.reset();
+                mMediaRecorder.release();
+            }
+
             mMediaRecorder = null;
-            Uri contentUri = Uri.fromFile(getFile());
-            Intent mediaScanIntent = new android.content.Intent(
-                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                    contentUri
-            );
-            mContext.sendBroadcast(mediaScanIntent);
+
+            if (getFile() != null) {
+                Uri contentUri = Uri.fromFile(getFile());
+                Intent mediaScanIntent = new android.content.Intent(
+                        "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                        contentUri
+                );
+                mContext.sendBroadcast(mediaScanIntent);
+            }
+
             if (listener != null) {
                 listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
             }
