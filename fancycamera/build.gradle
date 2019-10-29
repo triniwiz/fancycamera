@@ -3,7 +3,7 @@ apply plugin: 'com.novoda.bintray-release'
 ext {
     PUBLISH_GROUP_ID = 'co.fitcom'
     PUBLISH_ARTIFACT_ID = 'fancycamera'
-    PUBLISH_VERSION = '1.1.11'
+    PUBLISH_VERSION = '1.1.12'
 }
 
 android {
@@ -26,7 +26,7 @@ android {
         }
     }
 
-    buildToolsVersion '28.0.3'
+    buildToolsVersion '29.0.2'
 }
 
 dependencies {
@@ -42,7 +42,7 @@ publish {
     userOrg = 'triniwiz'
     groupId = 'co.fitcom'
     artifactId = 'fancycamera'
-    publishVersion = '1.1.11'
+    publishVersion = '1.1.12'
     desc = ''
     website = ''
 }
