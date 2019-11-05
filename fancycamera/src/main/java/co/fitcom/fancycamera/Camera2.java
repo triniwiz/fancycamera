@@ -1040,15 +1040,19 @@ class Camera2 extends CameraBase {
             }
 
             try {
-                mPreviewSession.stopRepeating();
-                mPreviewSession.abortCaptures();
+                if(mPreviewSession != null) {
+                    mPreviewSession.stopRepeating();
+                    mPreviewSession.abortCaptures();
+                }
             } catch (CameraAccessException e) {
                 e.printStackTrace();
             }
 
 
             try {
-                mMediaRecorder.stop();
+                if(mMediaRecorder != null) {
+                    mMediaRecorder.stop();
+                }
             } catch (RuntimeException e) {
                 //handle the exception
             }
@@ -1056,15 +1060,23 @@ class Camera2 extends CameraBase {
             isStarted = false;
             isRecording = false;
             stopDurationTimer();
-            mMediaRecorder.reset();
-            mMediaRecorder.release();
+
+            if (mMediaRecorder != null) {
+                mMediaRecorder.reset();
+                mMediaRecorder.release();
+            }
+
             mMediaRecorder = null;
-            Uri contentUri = Uri.fromFile(getFile());
-            Intent mediaScanIntent = new android.content.Intent(
-                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                    contentUri
-            );
-            mContext.sendBroadcast(mediaScanIntent);
+
+            if (getFile() != null) {
+                Uri contentUri = Uri.fromFile(getFile());
+                Intent mediaScanIntent = new android.content.Intent(
+                        "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                        contentUri
+                );
+                mContext.sendBroadcast(mediaScanIntent);
+            }
+
             if (listener != null) {
                 listener.onVideoEvent(new VideoEvent(EventType.INFO, getFile(), VideoEvent.EventInfo.RECORDING_FINISHED.toString()));
             }
@@ -1093,14 +1105,20 @@ class Camera2 extends CameraBase {
             RectF bufferRect = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());
             float centerX = viewRect.centerX();
             float centerY = viewRect.centerY();
+
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+            float scale = Math.max(
+                    (float) viewHeight / previewSize.getHeight(),
+                    (float) viewWidth / previewSize.getWidth());
+            matrix.postScale(scale, scale, centerX, centerY);
+            
             if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-                bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
-                matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-                float scale = Math.max(
-                        (float) viewHeight / previewSize.getHeight(),
-                        (float) viewWidth / previewSize.getWidth());
-                matrix.postScale(scale, scale, centerX, centerY);
                 matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+            } else if (Surface.ROTATION_180 == rotation) {
+                matrix.postRotate(180, centerX, centerY);
+            } else {
+                matrix.postRotate(0, centerX, centerY);
             }
             getHolder().setTransform(matrix);
         }
