@@ -66,7 +66,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-@TargetApi(21)
+@androidx.annotation.RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 class Camera2 extends CameraBase {
     private static final Object lock = new Object();
     private CameraManager mManager;
@@ -98,7 +98,7 @@ class Camera2 extends CameraBase {
     private int maxVideoFrameRate = -1;
     private boolean saveToGallery = false;
     private boolean autoSquareCrop = false;
-
+    private boolean isAudioLevelsEnabled = false;
     private ImageReader reader;
 
     Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position, @Nullable FancyCamera.CameraOrientation orientation) {
@@ -147,6 +147,18 @@ class Camera2 extends CameraBase {
             }
         });
 
+    }
+
+    @Override
+    public void setEnableAudioLevels(boolean enable) {
+        synchronized (lock) {
+            isAudioLevelsEnabled = enable;
+        }
+    }
+
+    @Override
+    public boolean isAudioLevelsEnabled() {
+        return isAudioLevelsEnabled;
     }
 
     @Override
@@ -848,7 +860,7 @@ class Camera2 extends CameraBase {
             try {
                 mCameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
                     @Override
-                    public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                    public void onConfigured(@NonNull final CameraCaptureSession cameraCaptureSession) {
                         synchronized (lock) {
                             mPreviewSession = cameraCaptureSession;
                             updatePreview();
@@ -857,7 +869,15 @@ class Camera2 extends CameraBase {
                                 @Override
                                 public void run() {
                                     synchronized (lock) {
-                                        mMediaRecorder.start();
+                                        try {
+                                            mMediaRecorder.start();
+                                        } catch (IllegalStateException e) {
+                                            try {
+                                                setUpMediaRecorder();
+                                            } catch (IOException ex) {
+                                                ex.printStackTrace();
+                                            }
+                                        }
                                         isRecording = true;
                                         startDurationTimer();
                                         if (listener != null) {
@@ -1040,7 +1060,7 @@ class Camera2 extends CameraBase {
             }
 
             try {
-                if(mPreviewSession != null) {
+                if (mPreviewSession != null) {
                     mPreviewSession.stopRepeating();
                     mPreviewSession.abortCaptures();
                 }
@@ -1050,7 +1070,7 @@ class Camera2 extends CameraBase {
 
 
             try {
-                if(mMediaRecorder != null) {
+                if (mMediaRecorder != null) {
                     mMediaRecorder.stop();
                 }
             } catch (RuntimeException e) {
@@ -1112,7 +1132,7 @@ class Camera2 extends CameraBase {
                     (float) viewHeight / previewSize.getHeight(),
                     (float) viewWidth / previewSize.getWidth());
             matrix.postScale(scale, scale, centerX, centerY);
-            
+
             if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
                 matrix.postRotate(90 * (rotation - 2), centerX, centerY);
             } else if (Surface.ROTATION_180 == rotation) {

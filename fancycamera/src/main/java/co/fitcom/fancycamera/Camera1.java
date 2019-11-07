@@ -61,6 +61,7 @@ public class Camera1 extends CameraBase {
     private int maxVideoFrameRate = -1;
     private boolean saveToGallery = false;
     private boolean autoSquareCrop = false;
+    private boolean isAudioLevelsEnabled = false;
 
     Camera1(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position) {
         super(textureView);
@@ -97,6 +98,18 @@ public class Camera1 extends CameraBase {
     @Override
     MediaRecorder getRecorder() {
         return mMediaRecorder;
+    }
+
+    @Override
+    public void setEnableAudioLevels(boolean enable) {
+        synchronized (lock) {
+            isAudioLevelsEnabled = enable;
+        }
+    }
+
+    @Override
+    public boolean isAudioLevelsEnabled() {
+        return isAudioLevelsEnabled;
     }
 
     @Override
@@ -536,7 +549,7 @@ public class Camera1 extends CameraBase {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
-                getFile().delete();
+                final boolean delete = getFile().delete();
                 stopDurationTimer();
             } finally {
                 isRecording = false;

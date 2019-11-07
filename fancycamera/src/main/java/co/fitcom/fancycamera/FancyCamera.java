@@ -57,27 +57,32 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
     }
 
     private void initListener() {
-        if (!hasPermission()) {
-            return;
-        }
-        if (recorder != null) deInitListener();
-        recorder = new MediaRecorder();
-        recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
-        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-        recorder.setOutputFile("/dev/null");
-        try {
-            recorder.prepare();
-            recorder.start();
-            isGettingAudioLvls = true;
-            mEMA = 0.0;
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (isAudioLevelsEnabled()) {
+            if (!hasPermission()) {
+                return;
+            }
+            if (recorder != null) deInitListener();
+            recorder = new MediaRecorder();
+            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+            recorder.setOutputFile("/dev/null");
+            try {
+                recorder.prepare();
+                recorder.start();
+                isGettingAudioLvls = true;
+                mEMA = 0.0;
+            } catch (IOException e) {
+                // Need this ???
+                e.printStackTrace();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
     public void deInitListener() {
-        if (isGettingAudioLvls) {
+        if (isAudioLevelsEnabled() && isGettingAudioLvls) {
             try {
                 recorder.stop();
                 recorder.release();
@@ -148,6 +153,7 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
                 setMaxAudioBitRate(a.getInteger(R.styleable.FancyCamera_maxAudioBitRate, -1));
                 setMaxVideoBitrate(a.getInteger(R.styleable.FancyCamera_maxVideoBitrate, -1));
                 setMaxVideoFrameRate(a.getInteger(R.styleable.FancyCamera_maxVideoFrameRate, -1));
+                setEnableAudioLevels(a.getBoolean(R.styleable.FancyCamera_audioLevels, false));
 
             } finally {
                 a.recycle();
@@ -415,16 +421,26 @@ public class FancyCamera extends TextureView implements TextureView.SurfaceTextu
         cameraBase.toggleCamera();
     }
 
+    public void setEnableAudioLevels(boolean enableAudioLevels) {
+        cameraBase.setEnableAudioLevels(enableAudioLevels);
+    }
+
+    public boolean isAudioLevelsEnabled() {
+        return cameraBase.isAudioLevelsEnabled();
+    }
+
     public double getAmplitude() {
-        double amp;
-        if (cameraRecording()) {
-            amp = cameraBase.getRecorder() != null ? cameraBase.getRecorder().getMaxAmplitude() : 0;
-            return amp;
-        }
-        try {
-            amp = recorder != null ? recorder.getMaxAmplitude() : 0;
-        } catch (Exception ignored) {
-            amp = 0;
+        double amp = 0;
+        if (isAudioLevelsEnabled()) {
+            if (cameraRecording()) {
+                amp = cameraBase.getRecorder() != null ? cameraBase.getRecorder().getMaxAmplitude() : 0;
+                return amp;
+            }
+            try {
+                amp = recorder != null ? recorder.getMaxAmplitude() : 0;
+            } catch (Exception ignored) {
+                amp = 0;
+            }
         }
         return amp;
     }

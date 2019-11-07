@@ -27,5 +27,6 @@
         <attr name="maxVideoBitrate" format="integer" />
         <attr name="maxAudioBitRate" format="integer" />
         <attr name="maxVideoFrameRate" format="integer" />
+        <attr name="audioLevels" format="boolean" />
     </declare-styleable>
 </resources>

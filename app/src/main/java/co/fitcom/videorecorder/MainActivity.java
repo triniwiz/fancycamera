@@ -1,10 +1,11 @@
 package co.fitcom.videorecorder;
 
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+
 import androidx.appcompat.app.AppCompatActivity;
+
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
@@ -34,7 +35,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         videoPlayer = findViewById(R.id.videoPlayer);
         durationView = findViewById(R.id.durationView);
-        cameraView = findViewById(R.id.holder);
+        cameraView = findViewById(R.id.cameraView);
         cameraView.setCameraPosition(FancyCamera.CameraPosition.BACK);
         cameraView.setQuality(FancyCamera.Quality.HIGHEST.getValue());
         cameraView.setListener(new CameraEventListenerUI() {
@@ -86,6 +87,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void startRecording(View view) {
+        cameraView.setQuality(FancyCamera.Quality.MAX_720P.getValue());
         cameraView.startRecording();
     }
 
@@ -127,20 +129,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     void start() {
-        if (levelsTask == null) {
-            levelsTask = new Timer();
-            levelsTask.scheduleAtFixedRate(new TimerTask() {
-                @Override
-                public void run() {
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            level = Math.pow(10, (0.02 * cameraView.getDB()));
-                            Log.d("co.test", "Audio Levels" + level);
-                        }
-                    });
-                }
-            }, 0, 1000);
+        if (cameraView.isAudioLevelsEnabled()) {
+            if (levelsTask == null) {
+                levelsTask = new Timer();
+                levelsTask.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                level = Math.pow(10, (0.02 * cameraView.getDB()));
+                                Log.d("co.test", "Audio Levels" + level);
+                            }
+                        });
+                    }
+                }, 0, 1000);
+            }
         }
         cameraView.start();
     }
@@ -148,8 +152,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        Boolean b = cameraView.hasPermission();
-        Log.d("hasPermission", b.toString());
+        boolean b = cameraView.hasPermission();
+        Log.d("hasPermission", Boolean.toString(b));
         if (cameraView.hasPermission()) {
             start();
         } else {

@@ -60,6 +60,10 @@ public abstract class CameraBase {
         return quality;
     }
 
+    abstract public void setEnableAudioLevels(boolean enable);
+
+    abstract public boolean isAudioLevelsEnabled();
+
     abstract boolean getAutoSquareCrop();
 
     abstract void setAutoSquareCrop(boolean crop);

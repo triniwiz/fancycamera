@@ -17,7 +17,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".Home" />
-        <activity android:name=".Photo"></activity>
+        <activity android:name=".Photo" />
     </application>
 
 </manifest>
