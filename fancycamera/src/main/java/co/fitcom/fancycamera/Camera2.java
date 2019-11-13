@@ -91,7 +91,7 @@ class Camera2 extends CameraBase {
     private static final SparseIntArray INVERSE_ORIENTATIONS = new SparseIntArray();
     private Integer mSensorOrientation;
     private String cameraIdToOpen = "0";
-    private boolean mAutoFocus;
+    private boolean mAutoFocus = true;
     private boolean disableHEVC = false;
     private int maxVideoBitrate = -1;
     private int maxAudioBitRate = -1;

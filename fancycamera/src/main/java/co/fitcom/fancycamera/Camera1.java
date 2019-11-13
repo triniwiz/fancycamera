@@ -54,7 +54,7 @@ public class Camera1 extends CameraBase {
     private TimerTask mTimerTask;
     private int mDuration = 0;
     private boolean isFlashEnabled = false;
-    private boolean mAutoFocus = false;
+    private boolean mAutoFocus = true;
     private boolean disableHEVC = false;
     private int maxVideoBitrate = -1;
     private int maxAudioBitRate = -1;
