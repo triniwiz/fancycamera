@@ -9,7 +9,6 @@ package co.fitcom.fancycamera;
 
 import android.Manifest;
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -20,14 +19,17 @@ import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Point;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
+import android.graphics.YuvImage;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
@@ -40,6 +42,7 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Display;
@@ -51,6 +54,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -69,6 +73,7 @@ import java.util.Locale;
 @androidx.annotation.RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
 class Camera2 extends CameraBase {
     private static final Object lock = new Object();
+    private static final String TAG = "Camera2.Fancy";
     private CameraManager mManager;
     MediaRecorder mMediaRecorder;
     private FancyCamera.CameraPosition mPosition;
@@ -100,6 +105,95 @@ class Camera2 extends CameraBase {
     private boolean autoSquareCrop = false;
     private boolean isAudioLevelsEnabled = false;
     private ImageReader reader;
+
+    private ImageReader.OnImageAvailableListener readOnImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader imageReader) {
+            Image image = imageReader.acquireLatestImage();
+            Bitmap bitmap = imageToBitmap(image);
+            try {
+                save(bitmap);
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                reader = null;
+                Uri contentUri = Uri.fromFile(getFile());
+                Intent mediaScanIntent = new android.content.Intent(
+                        "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                        contentUri
+                );
+                mContext.sendBroadcast(mediaScanIntent);
+                if (getListener() != null) {
+                    PhotoEvent event = new PhotoEvent(EventType.INFO, getFile(), PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
+                    getListener().onPhotoEvent(event);
+                } else {
+                    Log.w(TAG, "No listener found");
+                }
+            }
+        }
+
+        private Bitmap imageToBitmap(Image image) {
+            // NV21 is a plane of 8 bit Y values followed by interleaved  Cb Cr
+            ByteBuffer ib = ByteBuffer.allocate(image.getHeight() * image.getWidth() * 2);
+
+            ByteBuffer y = image.getPlanes()[0].getBuffer();
+            ByteBuffer cr = image.getPlanes()[1].getBuffer();
+            ByteBuffer cb = image.getPlanes()[2].getBuffer();
+            ib.put(y);
+            ib.put(cb);
+            ib.put(cr);
+
+            YuvImage yuvImage = new YuvImage(ib.array(),
+                    ImageFormat.NV21, image.getWidth(), image.getHeight(), null);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            yuvImage.compressToJpeg(new Rect(0, 0,
+                    image.getWidth(), image.getHeight()), 50, out);
+            byte[] imageBytes = out.toByteArray();
+            return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
+        }
+
+        private void save(Bitmap bm) throws IOException {
+            int originalWidth = bm.getWidth();
+            int originalHeight = bm.getHeight();
+            int offsetWidth = 0;
+            int offsetHeight = 0;
+            if (getAutoSquareCrop()) {
+                if (originalWidth < originalHeight) {
+                    offsetHeight = (originalHeight - originalWidth) / 2;
+                    originalHeight = originalWidth;
+                } else {
+                    offsetWidth = (originalWidth - originalHeight) / 2;
+                    originalWidth = originalHeight;
+                }
+            }
+
+            // this flips the front camera image to not be 'mirrored effect' for selfies
+            // does not flip if using the back camera
+            Matrix matrix = new Matrix();
+            if (mPosition == FancyCamera.CameraPosition.FRONT) {
+                float[] mirrorY = {-1, 0, 0, 0, 1, 0, 0, 0, 1};
+                Matrix matrixMirrorY = new Matrix();
+                matrixMirrorY.setValues(mirrorY);
+                matrix.postConcat(matrixMirrorY);
+                matrix.postRotate(90);
+            } else {
+                matrix.postRotate(mSensorOrientation);
+            }
+
+            Bitmap rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
+
+            File cameraDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+            if (!cameraDir.exists()) {
+                final boolean mkdirs = cameraDir.mkdirs();
+            }
+            try (OutputStream outputStream = new FileOutputStream(getFile())) {
+                rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
+            }
+            bm.recycle();
+            rotated.recycle();
+        }
+    };
 
     Camera2(Context context, TextureView textureView, @Nullable FancyCamera.CameraPosition position, @Nullable FancyCamera.CameraOrientation orientation) {
         super(textureView);
@@ -756,7 +850,7 @@ class Camera2 extends CameraBase {
 
                 Surface previewSurface = new Surface(texture);
                 mPreviewBuilder.addTarget(previewSurface);
-                updateAutoFocus(false);
+                updateAutoFocus(true);
                 // tempOffFlash(mPreviewBuilder);
                 mCameraDevice.createCaptureSession(Collections.singletonList(previewSurface),
                         new CameraCaptureSession.StateCallback() {
@@ -770,15 +864,15 @@ class Camera2 extends CameraBase {
 
                             @Override
                             public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-
+                                Log.e(TAG, "configure fail " + session.toString());
                             }
                         }, backgroundHandler);
             } catch (CameraAccessException e) {
+                Log.e(TAG, "CameraAccessException " + e.toString());
                 e.printStackTrace();
             }
         }
     }
-
 
     private void closePreviewSession() {
         synchronized (lock) {
@@ -891,10 +985,11 @@ class Camera2 extends CameraBase {
 
                     @Override
                     public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
-
+                        Log.e(TAG, "onConfigureFailed");
                     }
                 }, backgroundHandler);
             } catch (CameraAccessException e) {
+                Log.e(TAG, e.toString());
                 e.printStackTrace();
             }
         }
@@ -925,7 +1020,7 @@ class Camera2 extends CameraBase {
                     height = size.getHeight();
                 }
 
-                reader = ImageReader.newInstance(width, height, ImageFormat.JPEG, 1);
+                reader = ImageReader.newInstance(width, height, ImageFormat.YUV_420_888, 2);
 
                 SurfaceTexture texture = getHolder().getSurfaceTexture();
                 assert texture != null;
@@ -953,64 +1048,9 @@ class Camera2 extends CameraBase {
                 } else {
                     setFile(new File(mContext.getExternalFilesDir(null), "PIC_" + df.format(today) + ".jpg"));
                 }
-                ImageReader.OnImageAvailableListener readOnImageAvailableListener = new ImageReader.OnImageAvailableListener() {
-                    @Override
-                    public void onImageAvailable(ImageReader imageReader) {
-                        Image image = imageReader.acquireLatestImage();
-                        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-                        byte[] bytes = new byte[buffer.capacity()];
-                        buffer.get(bytes);
-                        try {
-                            save(bytes, image);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        } finally {
-                            reader = null;
-                            Uri contentUri = Uri.fromFile(getFile());
-                            Intent mediaScanIntent = new android.content.Intent(
-                                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                                    contentUri
-                            );
-                            mContext.sendBroadcast(mediaScanIntent);
-                            if (getListener() != null) {
-                                PhotoEvent event = new PhotoEvent(EventType.INFO, getFile(), PhotoEvent.EventInfo.PHOTO_TAKEN.toString());
-                                getListener().onPhotoEvent(event);
-                            }
-                        }
-                    }
 
-                    private void save(byte[] bytes, Image image) throws IOException {
-                        Bitmap bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                        Matrix matrix = new Matrix();
-                        matrix.postRotate(mSensorOrientation);
-
-                        int originalWidth = bm.getWidth();
-                        int originalHeight = bm.getHeight();
-                        int offsetWidth = 0;
-                        int offsetHeight = 0;
-                        if (getAutoSquareCrop()) {
-                            if (originalWidth < originalHeight) {
-                                offsetHeight = (originalHeight - originalWidth) / 2;
-                                originalHeight = originalWidth;
-                            } else {
-                                offsetWidth = (originalWidth - originalHeight) / 2;
-                                originalWidth = originalHeight;
-                            }
-                        }
-                        Bitmap rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
-
-                        File cameraDir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
-                        if (!cameraDir.exists()) {
-                            final boolean mkdirs = cameraDir.mkdirs();
-                        }
-                        try (OutputStream outputStream = new FileOutputStream(getFile())) {
-                            rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream);
-                        }
-                        bm.recycle();
-                        rotated.recycle();
-                    }
-                };
                 reader.setOnImageAvailableListener(readOnImageAvailableListener, backgroundHandler);
+
                 final CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
                     @Override
                     public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
@@ -1020,6 +1060,12 @@ class Camera2 extends CameraBase {
                             start(); //TODO allow user to choose
                             isCapturingPhoto = false;
                         }
+                    }
+
+                    @Override
+                    public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull CaptureFailure failure) {
+                        super.onCaptureFailed(session, request, failure);
+                        Log.e(TAG, "onCaptureFailed " + session + " " + request);
                     }
                 };
 
