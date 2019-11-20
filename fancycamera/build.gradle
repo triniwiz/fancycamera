@@ -1,8 +1,10 @@
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: 'kotlin-android'
 apply plugin: 'com.novoda.bintray-release'
 apply plugin: 'com.github.dcendents.android-maven' // for jitpack
 
-group='co.fitcom.fancycamera'
+group = 'co.fitcom.fancycamera'
 
 ext {
     PUBLISH_GROUP_ID = 'co.fitcom'
@@ -15,7 +17,7 @@ android {
     buildToolsVersion BUILD_TOOLS_VERSION as String
 
     defaultConfig {
-        minSdkVersion 17
+        minSdkVersion 21
         versionCode 1
         versionName "1.0"
 
@@ -31,6 +33,11 @@ android {
     }
 
     buildToolsVersion '29.0.2'
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
 }
 
 dependencies {
@@ -39,6 +46,13 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test:runner:1.2.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+
+    implementation "androidx.camera:camera-core:$camerax_version"
+    implementation "androidx.camera:camera-camera2:$camerax_version"
+    implementation "androidx.camera:camera-view:$camerax_view_version"
+    implementation "androidx.camera:camera-extensions:$camerax_ext_version"
+    implementation "androidx.core:core-ktx:1.1.0"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
 
 
@@ -49,4 +63,7 @@ publish {
     publishVersion = '1.2.2'
     desc = ''
     website = ''
+}
+repositories {
+    mavenCentral()
 }

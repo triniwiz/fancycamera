@@ -5,10 +5,10 @@
  *
  */
 
-package co.fitcom.fancycamera;
+package co.fitcom.fancycamera
 
 
-public enum EventType {
+enum class EventType {
     ERROR,
     INFO
 }
