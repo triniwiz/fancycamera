@@ -110,11 +110,14 @@ class Camera2 extends CameraBase {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             Image image = imageReader.acquireLatestImage();
-            Bitmap bitmap = imageToBitmap(image);
             try {
+                Bitmap bitmap = imageToBitmap(image);
                 save(bitmap);
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (Throwable t) {
+                // IOException and java.nio.BufferOverflowException are known possibilities,
+                // but likely OutOfMemoryError too
+                // Buffers and Bitmaps are crash prone
+                t.printStackTrace();
             } finally {
                 reader = null;
                 Uri contentUri = Uri.fromFile(getFile());
