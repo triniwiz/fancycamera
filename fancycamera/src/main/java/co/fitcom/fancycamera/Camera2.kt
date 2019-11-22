@@ -15,15 +15,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Matrix
-import android.graphics.Point
-import android.graphics.Rect
-import android.graphics.RectF
-import android.graphics.SurfaceTexture
-import android.graphics.YuvImage
+import android.graphics.*
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
@@ -35,10 +27,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.StreamConfigurationMap
 import android.hardware.display.DisplayManager
-import android.media.CamcorderProfile
-import android.media.Image
-import android.media.ImageReader
-import android.media.MediaRecorder
+import android.media.*
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -48,11 +37,6 @@ import android.util.*
 import androidx.camera.view.CameraView
 import androidx.core.app.ActivityCompat
 
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.OutputStream
 import java.lang.reflect.Field
 import java.nio.ByteBuffer
 import java.text.DateFormat
@@ -64,11 +48,21 @@ import java.util.Date
 import java.util.Locale
 import android.view.*
 import androidx.camera.core.*
+import androidx.camera.core.impl.utils.executor.CameraXExecutors
+import androidx.camera.view.TextureViewMeteringPointFactory
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.OnLifecycleEvent
+import com.google.common.util.concurrent.ListenableFuture
+import java.io.*
 import java.lang.ref.WeakReference
+import java.nio.Buffer
+import java.nio.file.FileSystem
+import java.nio.file.Files
+import java.nio.file.Path
+import java.text.ParseException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -109,7 +103,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
     override var maxAudioBitRate = -1
     override var maxVideoFrameRate = -1
     override var saveToGallery = false
-    internal override var autoSquareCrop = false
+    override var autoSquareCrop = false
     override var isAudioLevelsEnabled = false
         private set
     private var reader: ImageReader? = null
@@ -203,16 +197,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     override val numberOfCameras: Int
         get() {
-            if (mManager != null) {
-                try {
-                    return mManager!!.cameraIdList.size
-                } catch (e: CameraAccessException) {
-                    e.printStackTrace()
-                    return 0
-                }
-
-            }
-            return 0
+            return CameraX.getCameraFactory().availableCameraIds.size
         }
 
     private var isCapturingPhoto: Boolean = false
@@ -242,7 +227,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
 
     private var mQuality = 0
-    internal override var quality: Int
+    override var quality: Int
         set(value) {
             mQuality = value
             refreshCamera()
@@ -252,9 +237,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         }
 
     override var didPauseForPermission = false
-
-    private var oldWidth = 0
-    private var oldHeight = 0
+    var didCreateBefore = false
 
     init {
         mManager = mContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
@@ -272,6 +255,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             @OnLifecycleEvent(Lifecycle.Event.ON_PAUSE)
             fun onPause() {
                 displayManager.unregisterDisplayListener(displayListener)
+                didCreateBefore = true
             }
 
             @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
@@ -284,6 +268,10 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                 if (didPauseForPermission) {
                     refreshCamera()
                     didPauseForPermission = false
+                }
+
+                if (!didPauseForPermission && didCreateBefore) {
+                 //   refreshCamera()
                 }
             }
         })
@@ -324,22 +312,6 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             textureViewDisplay = textureView.display.displayId
             refreshCamera()
         }
-
-        textViewListener = object : TextViewListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                oldHeight = height
-                oldWidth = width
-            }
-
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-
-            }
-
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture) {}
-
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {}
-        }
-
     }
 
     private fun currentLens(): CameraX.LensFacing {
@@ -361,14 +333,11 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     private var didOpen = false
 
+    private lateinit var autoFitPreview: AutoFitPreviewBuilder
+
+    @SuppressLint("ClickableViewAccessibility")
     private fun refreshCamera() {
-        if (preview != null && imageCapture != null && videoCapture != null) {
-            CameraX.unbind(preview!!, imageCapture!!, videoCapture!!)
-        }
-        if (didOpen) {
-            listener?.onCameraClose()
-            didOpen = false
-        }
+        CameraX.unbindAll()
         if (!textureView.isAvailable || !hasPermission()) {
             return
         }
@@ -427,62 +396,33 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                 }.build()
 
         previewConfig = config.build()
-        preview = AutoFitPreviewBuilder.build(previewConfig,textureView, this) //Preview(previewConfig)
+        autoFitPreview = AutoFitPreviewBuilder.build(previewConfig, textureView, listener) //Preview(previewConfig)
+        preview = autoFitPreview.useCase
+        val cameraControl = CameraX.getCameraControl(currentLens)
 
+        textureView.setOnTouchListener { _, event ->
+            if (event.action != MotionEvent.ACTION_UP) {
+                return@setOnTouchListener false
+            }
+
+            val factory = TextureViewMeteringPointFactory(textureView)
+            val point = factory.createPoint(event.x, event.y)
+            val action = FocusMeteringAction.Builder.from(point).build()
+            cameraControl.startFocusAndMetering(action)
+            return@setOnTouchListener true
+        }
         videoCapture = VideoCapture(videoCaptureConfig)
         imageCaptureConfig = imageConfig.build()
         imageCapture = ImageCapture(imageCaptureConfig)
-       /* preview?.setOnPreviewOutputUpdateListener {
-            val parent = textureView.parent as ViewGroup
-            val index = parent.indexOfChild(textureView)
-            parent.removeView(textureView)
-            textureView.surfaceTexture = it.surfaceTexture
-            parent.addView(textureView, index)
-         //   updateTransform()
-            listener?.onCameraOpen()
-            didOpen = true
-        }
-        */
-
         CameraX.bindToLifecycle(mContext as LifecycleOwner, preview!!, imageCapture!!, videoCapture!!)
 
-    }
-
-    private fun updateTransform() {
-        val matrix = Matrix()
-
-        // Compute the center of the view finder
-        val centerX = textureView.width / 2f
-        val centerY = textureView.height / 2f
-
-        Log.d("com.test", "" + textureView.width + " " + textureView.height)
-
-        // Correct preview output to account for display rotation
-        val rotationDegrees = when (textureView.display.rotation) {
-            Surface.ROTATION_0 -> 0
-            Surface.ROTATION_90 -> 90
-            Surface.ROTATION_180 -> 180
-            Surface.ROTATION_270 -> 270
-            else -> return
-        }
-        matrix.postRotate(-rotationDegrees.toFloat(), centerX, centerY)
-
-        val scale = max(
-                oldWidth/textureView.width ,
-                oldHeight/textureView.height).toFloat()
-        matrix.postScale(scale, scale, centerX, centerY)
-
-            Log.d("com.test","scale " + scale)
-        // Finally, apply transformations to our TextureView
-          textureView.setTransform(matrix)
     }
 
     override fun setEnableAudioLevels(enable: Boolean) {
         isAudioLevelsEnabled = enable
     }
 
-
-    internal override fun hasCamera(): Boolean {
+    override fun hasCamera(): Boolean {
         if (mManager == null) return false
         try {
             return mManager!!.cameraIdList.isNotEmpty()
@@ -492,16 +432,16 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         return false
     }
 
-    internal override fun cameraStarted(): Boolean {
+    override fun cameraStarted(): Boolean {
         return isStarted
     }
 
-    internal override fun cameraRecording(): Boolean {
+    override fun cameraRecording(): Boolean {
         return isRecording
     }
 
 
-    internal override fun openCamera(width: Int, height: Int) {
+    override fun openCamera(width: Int, height: Int) {
 
     }
 
@@ -756,68 +696,24 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
 
     private fun startPreview() {
-        synchronized(lock) {
-            if (mCameraDevice == null || !holder.isAvailable) {
-                return
-            }
-            val texture = holder.surfaceTexture
-            assert(texture != null)
-            texture!!.setDefaultBufferSize(previewSize!!.width, previewSize!!.height)
-            try {
-                if (mCameraDevice == null) return
-                mPreviewBuilder = mCameraDevice!!.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
 
-                val previewSurface = Surface(texture)
-                mPreviewBuilder!!.addTarget(previewSurface)
-                updateAutoFocus(true)
-                // tempOffFlash(mPreviewBuilder);
-                mCameraDevice!!.createCaptureSession(listOf<Surface>(previewSurface),
-                        object : CameraCaptureSession.StateCallback() {
-                            override fun onConfigured(session: CameraCaptureSession) {
-                                synchronized(lock) {
-                                    mPreviewSession = session
-                                    updatePreview()
-                                }
-                            }
-
-                            override fun onConfigureFailed(session: CameraCaptureSession) {
-                                Log.e(TAG, "configure fail $session")
-                            }
-                        }, backgroundHandler)
-            } catch (e: CameraAccessException) {
-                Log.e(TAG, "CameraAccessException $e")
-                e.printStackTrace()
-            }
-
-        }
     }
 
     private fun closePreviewSession() {
-        synchronized(lock) {
-            if (mPreviewSession != null) {
-                mPreviewSession!!.close()
-                mPreviewSession = null
-            }
 
-            if (null != recorder) {
-                recorder!!.reset()
-                recorder!!.release()
-                recorder = null
-            }
-        }
     }
 
-    internal override fun start() {
+    override fun start() {
         refreshCamera()
     }
 
 
-    internal override fun stop() {
+    override fun stop() {
         CameraX.unbindAll()
     }
 
 
-    internal override fun startRecording() {
+    override fun startRecording() {
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         if (saveToGallery && hasStoragePermission()) {
@@ -832,11 +728,6 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
         videoCapture?.startRecording(file!!, executorService, object : VideoCapture.OnVideoSavedListener {
             override fun onVideoSaved(videoFile: File) {
-                if (!isRecording) {
-                    return
-                }
-
-
                 isStarted = false
                 isRecording = false
                 stopDurationTimer()
@@ -857,7 +748,6 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             }
 
             override fun onError(videoCaptureError: VideoCapture.VideoCaptureError, message: String, cause: Throwable?) {
-                Log.e("com.test", "error: " + message + " " + videoCaptureError.name)
                 isStarted = false
                 isRecording = false
                 stopDurationTimer()
@@ -870,7 +760,28 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         listener?.onVideoEvent(VideoEvent(EventType.INFO, null, VideoEvent.EventInfo.RECORDING_STARTED.toString()))
     }
 
-    internal override fun takePhoto() {
+
+    fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        // Raw height and width of image
+        val (height: Int, width: Int) = options.run { outHeight to outWidth }
+        var inSampleSize = 1
+
+        if (height > reqHeight || width > reqWidth) {
+
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+
+            // Calculate the largest inSampleSize value that is a power of 2 and keeps both
+            // height and width larger than the requested height and width.
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+
+        return inSampleSize
+    }
+
+    override fun takePhoto() {
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         if (saveToGallery && hasStoragePermission()) {
@@ -886,60 +797,170 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         val meta = ImageCapture.Metadata().apply {
             isReversedHorizontal = imageCaptureConfig.lensFacing == CameraX.LensFacing.FRONT
         }
-        imageCapture?.takePicture(file!!, meta, executorService, object : ImageCapture.OnImageSavedListener {
-            override fun onImageSaved(file: File) {
-                val event = PhotoEvent(EventType.INFO, file, PhotoEvent.EventInfo.PHOTO_TAKEN.toString())
-                listener?.onPhotoEvent(event)
-            }
 
-            override fun onError(imageCaptureError: ImageCapture.ImageCaptureError, message: String, cause: Throwable?) {
-                // listener?.onPhotoEvent()
-            }
-        })
+        if (autoSquareCrop) {
+            imageCapture?.takePicture(executorService, object : ImageCapture.OnImageCapturedListener() {
+                override fun onCaptureSuccess(image: ImageProxy, rotationDegrees: Int) {
+                    CameraXExecutors.ioExecutor().execute {
+                        var isError = false
+                        try {
+                            val buffer = image.planes.first().buffer
+                            val bytes = ByteArray(buffer!!.remaining())
+                            buffer.get(bytes)
+
+                            val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            val matrix = Matrix()
+
+                            matrix.postRotate(rotationDegrees.toFloat())
+
+                            if (imageCaptureConfig.lensFacing == CameraX.LensFacing.FRONT) {
+                                matrix.postScale(-1f, 1f);
+                            }
+
+                            var originalWidth = bm.width
+                            var originalHeight = bm.height
+                            var offsetWidth = 0
+                            var offsetHeight = 0
+                            if (autoSquareCrop) {
+                                if (originalWidth < originalHeight) {
+                                    offsetHeight = (originalHeight - originalWidth) / 2;
+                                    originalHeight = originalWidth;
+                                } else {
+                                    offsetWidth = (originalWidth - originalHeight) / 2;
+                                    originalWidth = originalHeight;
+                                }
+                            }
+                            val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
+
+                            val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
+                            if (!cameraDir.exists()) {
+                                cameraDir.mkdirs();
+                            }
+                            val outputStream = FileOutputStream(file!!, false)
+                            rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+
+
+                            /*
+                            val exif = ExifInterface(file!!.absolutePath)
+
+                            val now = System.currentTimeMillis()
+                            val datetime = convertToExifDateTime(now)
+
+                            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
+                            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
+
+                            try {
+                                val subsec = java.lang.Long.toString(now - convertFromExifDateTime(datetime).getTime())
+                                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
+                                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
+                            } catch (e: ParseException) {
+                            }
+
+                            exif.rotate(rotationDegrees)
+                            if (meta.isReversedHorizontal) {
+                                exif.flipHorizontally()
+                            }
+                            if (meta.isReversedVertical) {
+                                exif.flipVertically()
+                            }
+                            if (meta.location != null) {
+
+                                exif.setGpsInfo(meta.location!!)
+                            }
+                            exif.saveAttributes()
+
+                            */
+
+                            bm.recycle()
+                            rotated.recycle()
+                        } catch (e: Exception) {
+                            isError = true
+                            val event = PhotoEvent(EventType.ERROR, null, PhotoEvent.EventError.UNKNOWN.toString())
+                            listener?.onPhotoEvent(event)
+                        } finally {
+                            try {
+                                image.close()
+                            } catch (e: Exception) {
+
+                            }
+                            if (!isError) {
+                                if (saveToGallery && hasStoragePermission()) {
+                                    val contentUri = Uri.fromFile(file)
+                                    val mediaScanIntent = Intent(
+                                            "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                                            contentUri
+                                    )
+                                    mContext.sendBroadcast(mediaScanIntent)
+                                }
+                                val event = PhotoEvent(EventType.INFO, file, PhotoEvent.EventInfo.PHOTO_TAKEN.toString())
+                                listener?.onPhotoEvent(event)
+                            }
+                        }
+                    }
+
+                }
+
+                override fun onError(imageCaptureError: ImageCapture.ImageCaptureError, message: String, cause: Throwable?) {
+                    val event = PhotoEvent(EventType.ERROR, null, PhotoEvent.EventError.UNKNOWN.toString())
+                    listener?.onPhotoEvent(event)
+                }
+            })
+        } else {
+            imageCapture?.takePicture(file!!, meta, executorService, object : ImageCapture.OnImageSavedListener {
+                override fun onImageSaved(file: File) {
+                    val event = PhotoEvent(EventType.INFO, file, PhotoEvent.EventInfo.PHOTO_TAKEN.toString())
+                    listener?.onPhotoEvent(event)
+                }
+
+                override fun onError(imageCaptureError: ImageCapture.ImageCaptureError, message: String, cause: Throwable?) {
+                    val event = PhotoEvent(EventType.ERROR, null, PhotoEvent.EventError.UNKNOWN.toString())
+                    listener?.onPhotoEvent(event)
+                }
+            })
+        }
+    }
+
+
+    private val DATE_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
+        public override fun initialValue(): SimpleDateFormat {
+            return SimpleDateFormat("yyyy:MM:dd", Locale.US)
+        }
+    }
+    private val TIME_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
+        public override fun initialValue(): SimpleDateFormat {
+            return SimpleDateFormat("HH:mm:ss", Locale.US)
+        }
+    }
+    private val DATETIME_FORMAT = object : ThreadLocal<SimpleDateFormat>() {
+        public override fun initialValue(): SimpleDateFormat {
+            return SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US)
+        }
+    }
+
+    private fun convertToExifDateTime(timestamp: Long): String {
+        return DATETIME_FORMAT.get()!!.format(Date(timestamp))
+    }
+
+    @Throws(ParseException::class)
+    private fun convertFromExifDateTime(dateTime: String): Date {
+        return DATETIME_FORMAT.get()!!.parse(dateTime)
     }
 
     private fun stopRecord() {
         videoCapture?.stopRecording()
     }
 
-    internal override fun stopRecording() {
+    override fun stopRecording() {
         stopRecord()
     }
 
 
     private fun configureTransform(viewWidth: Int, viewHeight: Int) {
-        synchronized(lock) {
-            val activity = mContext as Activity
-            if (null == holder || null == previewSize || null == activity) {
-                return
-            }
-            val rotation = activity.windowManager.defaultDisplay.rotation
-            val matrix = Matrix()
-            val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
-            val bufferRect = RectF(0f, 0f, previewSize!!.height.toFloat(), previewSize!!.width.toFloat())
-            val centerX = viewRect.centerX()
-            val centerY = viewRect.centerY()
 
-            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY())
-            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL)
-            val scale = Math.max(
-                    viewHeight.toFloat() / previewSize!!.height,
-                    viewWidth.toFloat() / previewSize!!.width)
-            matrix.postScale(scale, scale, centerX, centerY)
-
-            if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
-                matrix.postRotate((90 * (rotation - 2)).toFloat(), centerX, centerY)
-            } else if (Surface.ROTATION_180 == rotation) {
-                matrix.postRotate(180f, centerX, centerY)
-            } else {
-                matrix.postRotate(0f, centerX, centerY)
-            }
-            holder.setTransform(matrix)
-        }
     }
 
 
-    internal override fun toggleCamera() {
+    override fun toggleCamera() {
         if (mPosition == FancyCamera.CameraPosition.BACK) {
             mPosition = FancyCamera.CameraPosition.FRONT
         } else {
@@ -949,32 +970,33 @@ internal class Camera2(private val mContext: Context, private val textureView: T
     }
 
 
-    internal override fun release() {
-        synchronized(lock) {
-            if (isRecording) {
-                stopRecord()
-            }
-            stop()
-        }
+    override fun release() {
+        CameraX.unbindAll()
     }
 
 
-    internal override fun setCameraPosition(position: FancyCamera.CameraPosition) {
+    override fun setCameraPosition(position: FancyCamera.CameraPosition) {
         if (position != mPosition) {
             mPosition = position
             refreshCamera()
         }
     }
 
-    internal override fun setCameraOrientation(orientation: FancyCamera.CameraOrientation) {
+    override fun setCameraOrientation(orientation: FancyCamera.CameraOrientation) {
         mOrientation = orientation
+        refreshCamera()
     }
 
-    internal override fun hasFlash(): Boolean {
-        return CameraX.getCameraInfo(currentLens()).isFlashAvailable.value ?: false
+    override fun hasFlash(): Boolean {
+        return try {
+            val cameraInfo = CameraX.getCameraInfo(currentLens())
+            cameraInfo.isFlashAvailable.value ?: false
+        } catch (e: Exception) {
+            false
+        }
     }
 
-    internal override fun toggleFlash() {
+    override fun toggleFlash() {
         if (!hasFlash()) {
             return
         }
@@ -987,7 +1009,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     }
 
-    internal override fun enableFlash() {
+    override fun enableFlash() {
         if (!hasFlash()) {
             return
         }
@@ -995,7 +1017,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         imageCapture?.flashMode = FlashMode.ON
     }
 
-    internal override fun disableFlash() {
+    override fun disableFlash() {
         if (!hasFlash()) {
             return
         }
@@ -1004,7 +1026,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     }
 
-    internal override fun flashEnabled(): Boolean {
+    override fun flashEnabled(): Boolean {
         return isFlashEnabled
     }
 

@@ -129,7 +129,6 @@ class MainActivity : AppCompatActivity() {
                 }, 0, 1000)
             }
         }
-        cameraView.start()
     }
 
 }

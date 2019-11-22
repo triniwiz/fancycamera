@@ -120,7 +120,6 @@ abstract class CameraBase internal constructor(val holder: TextureView) {
     }
 
     fun requestStoragePermission() {
-        didPauseForPermission = true
         ActivityCompat.requestPermissions(holder.context as Activity, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 868)
     }
 

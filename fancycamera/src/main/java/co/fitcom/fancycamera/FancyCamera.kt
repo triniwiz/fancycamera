@@ -44,7 +44,7 @@ class FancyCamera : TextureView, TextureView.SurfaceTextureListener {
     val numberOfCameras: Int
         get() = cameraBase!!.numberOfCameras
 
-    internal var autoSquareCrop: Boolean
+    var autoSquareCrop: Boolean
         get() = cameraBase!!.autoSquareCrop
         set(autoSquareCrop) {
             cameraBase!!.autoSquareCrop = autoSquareCrop

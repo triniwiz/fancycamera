@@ -38,7 +38,7 @@ import kotlin.math.roundToInt
  * then instantiates a [Preview] which automatically resizes and rotates reacting to config changes.
  */
 class AutoFitPreviewBuilder private constructor(
-        config: PreviewConfig, viewFinderRef: WeakReference<TextureView>, cameraBaseRef: WeakReference<CameraBase>) {
+        config: PreviewConfig, viewFinderRef: WeakReference<TextureView>, listener: CameraEventListener?) {
 
     /** Public instance of preview use-case which can be used by consumers of this adapter */
     var useCase: Preview
@@ -60,6 +60,7 @@ class AutoFitPreviewBuilder private constructor(
 
     /** Internal reference of the [DisplayManager] */
     private lateinit var displayManager: DisplayManager
+
 
     /**
      * We need a display listener for orientation changes that do not trigger a configuration
@@ -110,7 +111,7 @@ class AutoFitPreviewBuilder private constructor(
             bufferRotation = it.rotationDegrees
             val rotation = getDisplaySurfaceRotation(viewFinder.display)
             updateTransform(viewFinder, rotation, it.textureSize, viewFinderDimens)
-            cameraBaseRef.get()?.listener?.onCameraOpen()
+            listener?.onCameraOpen()
         }
 
         // Every time the provided texture view changes, recompute layout
@@ -243,7 +244,7 @@ class AutoFitPreviewBuilder private constructor(
          * of [Preview] which automatically adjusts in size and rotation to compensate for
          * config changes.
          */
-        fun build(config: PreviewConfig, viewFinder: TextureView, cameraBase: CameraBase) =
-                AutoFitPreviewBuilder(config, WeakReference(viewFinder), WeakReference(cameraBase)).useCase
+        fun build(config: PreviewConfig, viewFinder: TextureView, listener: CameraEventListener?) =
+                AutoFitPreviewBuilder(config, WeakReference(viewFinder), listener)
     }
 }
