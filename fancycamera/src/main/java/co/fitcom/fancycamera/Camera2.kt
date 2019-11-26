@@ -271,7 +271,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                 }
 
                 if (!didPauseForPermission && didCreateBefore) {
-                 //   refreshCamera()
+                    //   refreshCamera()
                 }
             }
         })
@@ -342,79 +342,85 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             return
         }
 
-        val cameraOrientation = when (orientation) {
-            FancyCamera.CameraOrientation.PORTRAIT_UPSIDE_DOWN -> Surface.ROTATION_270
-            FancyCamera.CameraOrientation.PORTRAIT -> Surface.ROTATION_90
-            FancyCamera.CameraOrientation.LANDSCAPE_LEFT -> Surface.ROTATION_0
-            FancyCamera.CameraOrientation.LANDSCAPE_RIGHT -> Surface.ROTATION_180
-            else -> textureView.display.rotation
-        }
-
-
-        val currentLens = currentLens()
-
-
-        val config = PreviewConfig.Builder.fromConfig(previewConfig)
-                .apply {
-                    setTargetRotation(cameraOrientation)
-                    setLensFacing(currentLens)
-                }
-        val imageConfig = ImageCaptureConfig.Builder.fromConfig(imageCaptureConfig)
-                .apply {
-                    setTargetRotation(cameraOrientation)
-                    setLensFacing(currentLens)
-                    setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
-                }
-
-        val profile = getCamcorderProfile(FancyCamera.Quality.values()[quality])
-
-        config.setTargetResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
-
-        videoCaptureConfig = VideoCaptureConfig.Builder.fromConfig(videoCaptureConfig)
-                .apply {
-                    setTargetRotation(cameraOrientation)
-                    setLensFacing(currentLens)
-                    setTargetResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
-                    setMaxResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
-
-                    var _maxVideoBitrate = profile.videoBitRate
-                    if (maxVideoBitrate > -1) {
-                        _maxVideoBitrate = maxVideoBitrate
-                    }
-                    var _maxVideoFrameRate = profile.videoFrameRate
-                    if (maxVideoFrameRate > -1) {
-                        _maxVideoFrameRate = maxVideoFrameRate
-                    }
-                    var _maxAudioBitRate = profile.audioBitRate
-                    if (maxAudioBitRate > -1) {
-                        _maxAudioBitRate = maxAudioBitRate
-                    }
-
-                    setAudioBitRate(min(profile.audioBitRate, _maxAudioBitRate))
-                    setBitRate(min(profile.videoBitRate, _maxVideoBitrate))
-                    setVideoFrameRate(min(profile.videoFrameRate, _maxVideoFrameRate))
-                }.build()
-
-        previewConfig = config.build()
-        autoFitPreview = AutoFitPreviewBuilder.build(previewConfig, textureView, listener) //Preview(previewConfig)
-        preview = autoFitPreview.useCase
-        val cameraControl = CameraX.getCameraControl(currentLens)
-
-        textureView.setOnTouchListener { _, event ->
-            if (event.action != MotionEvent.ACTION_UP) {
-                return@setOnTouchListener false
+        try {
+            val cameraOrientation = when (orientation) {
+                FancyCamera.CameraOrientation.PORTRAIT_UPSIDE_DOWN -> Surface.ROTATION_270
+                FancyCamera.CameraOrientation.PORTRAIT -> Surface.ROTATION_90
+                FancyCamera.CameraOrientation.LANDSCAPE_LEFT -> Surface.ROTATION_0
+                FancyCamera.CameraOrientation.LANDSCAPE_RIGHT -> Surface.ROTATION_180
+                else -> textureView.display.rotation
             }
 
-            val factory = TextureViewMeteringPointFactory(textureView)
-            val point = factory.createPoint(event.x, event.y)
-            val action = FocusMeteringAction.Builder.from(point).build()
-            cameraControl.startFocusAndMetering(action)
-            return@setOnTouchListener true
+
+            val currentLens = currentLens()
+
+
+            val config = PreviewConfig.Builder.fromConfig(previewConfig)
+                    .apply {
+                        setTargetRotation(cameraOrientation)
+                        setLensFacing(currentLens)
+                    }
+            val imageConfig = ImageCaptureConfig.Builder.fromConfig(imageCaptureConfig)
+                    .apply {
+                        setTargetRotation(cameraOrientation)
+                        setLensFacing(currentLens)
+                        setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
+                    }
+
+            val profile = getCamcorderProfile(FancyCamera.Quality.values()[quality])
+
+            config.setTargetResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
+
+            videoCaptureConfig = VideoCaptureConfig.Builder.fromConfig(videoCaptureConfig)
+                    .apply {
+                        setTargetRotation(cameraOrientation)
+                        setLensFacing(currentLens)
+                        setTargetResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
+                        setMaxResolution(Size(profile.videoFrameWidth, profile.videoFrameHeight))
+
+                        var _maxVideoBitrate = profile.videoBitRate
+                        if (maxVideoBitrate > -1) {
+                            _maxVideoBitrate = maxVideoBitrate
+                        }
+                        var _maxVideoFrameRate = profile.videoFrameRate
+                        if (maxVideoFrameRate > -1) {
+                            _maxVideoFrameRate = maxVideoFrameRate
+                        }
+                        var _maxAudioBitRate = profile.audioBitRate
+                        if (maxAudioBitRate > -1) {
+                            _maxAudioBitRate = maxAudioBitRate
+                        }
+
+                        setAudioBitRate(min(profile.audioBitRate, _maxAudioBitRate))
+                        setBitRate(min(profile.videoBitRate, _maxVideoBitrate))
+                        setVideoFrameRate(min(profile.videoFrameRate, _maxVideoFrameRate))
+                    }.build()
+
+            previewConfig = config.build()
+            autoFitPreview = AutoFitPreviewBuilder.build(previewConfig, textureView, listener) //Preview(previewConfig)
+            preview = autoFitPreview.useCase
+            val cameraControl = CameraX.getCameraControl(currentLens)
+
+            textureView.setOnTouchListener { _, event ->
+                if (event.action != MotionEvent.ACTION_UP) {
+                    return@setOnTouchListener false
+                }
+
+                val factory = TextureViewMeteringPointFactory(textureView)
+                val point = factory.createPoint(event.x, event.y)
+                val action = FocusMeteringAction.Builder.from(point).build()
+                cameraControl.startFocusAndMetering(action)
+                return@setOnTouchListener true
+            }
+            videoCapture = VideoCapture(videoCaptureConfig)
+            imageCaptureConfig = imageConfig.build()
+            imageCapture = ImageCapture(imageCaptureConfig)
+
+            CameraX.bindToLifecycle(mContext as LifecycleOwner, preview!!)
+        } catch (e: IllegalStateException) {
+            CameraX.unbindAll()
+            e.printStackTrace()
         }
-        videoCapture = VideoCapture(videoCaptureConfig)
-        imageCaptureConfig = imageConfig.build()
-        imageCapture = ImageCapture(imageCaptureConfig)
-        CameraX.bindToLifecycle(mContext as LifecycleOwner, preview!!, imageCapture!!, videoCapture!!)
 
     }
 
@@ -714,6 +720,23 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
 
     override fun startRecording() {
+        CameraX.unbind(imageCapture!!)
+        if (!CameraX.isBound(videoCapture)) {
+            try {
+                CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
+            } catch (e: IllegalStateException) {
+                // Try refreshing camera
+                e.printStackTrace()
+                refreshCamera()
+                try {
+                    CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
+                } catch (e: IllegalStateException) {
+                    e.printStackTrace()
+                    return
+                }
+            }
+        }
+
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         if (saveToGallery && hasStoragePermission()) {
@@ -782,6 +805,25 @@ internal class Camera2(private val mContext: Context, private val textureView: T
     }
 
     override fun takePhoto() {
+        CameraX.unbind(videoCapture!!)
+
+        if (!CameraX.isBound(imageCapture!!)) {
+            try {
+                CameraX.bindToLifecycle(mContext as LifecycleOwner, imageCapture!!)
+            } catch (e: IllegalStateException) {
+                // Try refreshing
+                e.printStackTrace()
+                refreshCamera()
+                try {
+                    CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
+                } catch (e: IllegalStateException) {
+                    e.printStackTrace()
+                    return
+                }
+            }
+        }
+
+
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         if (saveToGallery && hasStoragePermission()) {
