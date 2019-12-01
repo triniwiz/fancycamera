@@ -197,7 +197,13 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     override val numberOfCameras: Int
         get() {
-            return CameraX.getCameraFactory().availableCameraIds.size
+            var count = 0
+            try {
+                count = CameraX.getCameraFactory().availableCameraIds.size
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            return count
         }
 
     private var isCapturingPhoto: Boolean = false
@@ -239,9 +245,21 @@ internal class Camera2(private val mContext: Context, private val textureView: T
     override var didPauseForPermission = false
     var didCreateBefore = false
 
+    var currentOrientation: Int = Configuration.ORIENTATION_UNDEFINED
+
     init {
         mManager = mContext.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-
+        val orientationEventListener = object : OrientationEventListener(mContext) {
+            override fun onOrientationChanged(orientation: Int) {
+                currentOrientation = when (orientation) {
+                    in 0..20, in 340..359 -> 0
+                    in 70..110 -> 90
+                    in 250..290 -> 270
+                    in 160..200 -> 180
+                    else -> currentOrientation
+                }
+            }
+        }.enable()
         displayManager = mContext
                 .getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
@@ -273,6 +291,11 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                 if (!didPauseForPermission && didCreateBefore) {
                     //   refreshCamera()
                 }
+            }
+
+            @OnLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+            fun onDestroy() {
+                release()
             }
         })
 
@@ -337,7 +360,8 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
     @SuppressLint("ClickableViewAccessibility")
     private fun refreshCamera() {
-        CameraX.unbindAll()
+        safeUnbindAll()
+        preview?.removePreviewOutputListener()
         if (!textureView.isAvailable || !hasPermission()) {
             return
         }
@@ -397,7 +421,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                     }.build()
 
             previewConfig = config.build()
-            autoFitPreview = AutoFitPreviewBuilder.build(previewConfig, textureView, listener) //Preview(previewConfig)
+            autoFitPreview = AutoFitPreviewBuilder.build(previewConfig, textureView, listener)
             preview = autoFitPreview.useCase
             val cameraControl = CameraX.getCameraControl(currentLens)
 
@@ -417,11 +441,19 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             imageCapture = ImageCapture(imageCaptureConfig)
 
             CameraX.bindToLifecycle(mContext as LifecycleOwner, preview!!)
-        } catch (e: IllegalStateException) {
-            CameraX.unbindAll()
+        } catch (e: Exception) {
+            safeUnbindAll()
             e.printStackTrace()
         }
 
+    }
+
+    private fun safeUnbindAll() {
+        try {
+            CameraX.unbindAll()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     override fun setEnableAudioLevels(enable: Boolean) {
@@ -573,7 +605,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
             val modes = characteristics!!.get(
                     CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)
             // Auto focus is not supported
-            if (modes == null || modes.size == 0 ||
+            if (modes == null || modes.isEmpty() ||
                     modes.size == 1 && modes[0] == CameraCharacteristics.CONTROL_AF_MODE_OFF) {
                 mPreviewBuilder!!.set(CaptureRequest.CONTROL_AF_MODE,
                         CaptureRequest.CONTROL_AF_MODE_OFF)
@@ -715,25 +747,23 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
 
     override fun stop() {
-        CameraX.unbindAll()
+        safeUnbindAll()
     }
 
 
     override fun startRecording() {
-        CameraX.unbind(imageCapture!!)
-        if (!CameraX.isBound(videoCapture)) {
+        try {
+            refreshCamera()
+            CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
+        } catch (e: IllegalStateException) {
+            // Try refreshing camera
             try {
-                CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
-            } catch (e: IllegalStateException) {
-                // Try refreshing camera
                 e.printStackTrace()
                 refreshCamera()
-                try {
-                    CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
-                } catch (e: IllegalStateException) {
-                    e.printStackTrace()
-                    return
-                }
+                CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
+            } catch (e: IllegalStateException) {
+                e.printStackTrace()
+                return
             }
         }
 
@@ -764,9 +794,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                     mContext.sendBroadcast(mediaScanIntent)
                 }
 
-                if (listener != null) {
-                    listener?.onVideoEvent(VideoEvent(EventType.INFO, videoFile, VideoEvent.EventInfo.RECORDING_FINISHED.toString()))
-                }
+                listener?.onVideoEvent(VideoEvent(EventType.INFO, videoFile, VideoEvent.EventInfo.RECORDING_FINISHED.toString()))
                 file = null
             }
 
@@ -805,21 +833,18 @@ internal class Camera2(private val mContext: Context, private val textureView: T
     }
 
     override fun takePhoto() {
-        CameraX.unbind(videoCapture!!)
-
-        if (!CameraX.isBound(imageCapture!!)) {
+        try {
+            refreshCamera()
+            CameraX.bindToLifecycle(mContext as LifecycleOwner, imageCapture!!)
+        } catch (e: IllegalStateException) {
+            // Try refreshing
             try {
-                CameraX.bindToLifecycle(mContext as LifecycleOwner, imageCapture!!)
-            } catch (e: IllegalStateException) {
-                // Try refreshing
                 e.printStackTrace()
                 refreshCamera()
-                try {
-                    CameraX.bindToLifecycle(mContext as LifecycleOwner, videoCapture!!)
-                } catch (e: IllegalStateException) {
-                    e.printStackTrace()
-                    return
-                }
+                CameraX.bindToLifecycle(mContext as LifecycleOwner, imageCapture!!)
+            } catch (e: IllegalStateException) {
+                e.printStackTrace()
+                return
             }
         }
 
@@ -845,6 +870,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                 override fun onCaptureSuccess(image: ImageProxy, rotationDegrees: Int) {
                     CameraXExecutors.ioExecutor().execute {
                         var isError = false
+                        var outputStream: FileOutputStream? = null
                         try {
                             val buffer = image.planes.first().buffer
                             val bytes = ByteArray(buffer!!.remaining())
@@ -855,7 +881,33 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
                             matrix.postRotate(rotationDegrees.toFloat())
 
+                            if (imageCaptureConfig.lensFacing == CameraX.LensFacing.BACK) {
+                                if (currentOrientation == 90) {
+                                    matrix.postRotate(90f)
+                                }
+
+                                if (currentOrientation == 270) {
+                                    matrix.postRotate(270f)
+                                }
+
+                                if (currentOrientation == 180) {
+                                    matrix.postRotate(180f)
+                                }
+                            }
+
                             if (imageCaptureConfig.lensFacing == CameraX.LensFacing.FRONT) {
+                                if (currentOrientation == 90) {
+                                    matrix.postRotate(270f)
+                                }
+
+                                if (currentOrientation == 270) {
+                                    matrix.postRotate(90f)
+                                }
+
+                                if (currentOrientation == 180) {
+                                    matrix.postRotate(180f)
+                                }
+
                                 matrix.postScale(-1f, 1f);
                             }
 
@@ -878,11 +930,10 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                             if (!cameraDir.exists()) {
                                 cameraDir.mkdirs();
                             }
-                            val outputStream = FileOutputStream(file!!, false)
+                            outputStream = FileOutputStream(file!!, false)
                             rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
 
 
-                            /*
                             val exif = ExifInterface(file!!.absolutePath)
 
                             val now = System.currentTimeMillis()
@@ -892,7 +943,7 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                             exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
 
                             try {
-                                val subsec = java.lang.Long.toString(now - convertFromExifDateTime(datetime).getTime())
+                                val subsec = (now - convertFromExifDateTime(datetime).time).toString()
                                 exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
                                 exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
                             } catch (e: ParseException) {
@@ -906,12 +957,9 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                                 exif.flipVertically()
                             }
                             if (meta.location != null) {
-
                                 exif.setGpsInfo(meta.location!!)
                             }
                             exif.saveAttributes()
-
-                            */
 
                             bm.recycle()
                             rotated.recycle()
@@ -920,6 +968,11 @@ internal class Camera2(private val mContext: Context, private val textureView: T
                             val event = PhotoEvent(EventType.ERROR, null, PhotoEvent.EventError.UNKNOWN.toString())
                             listener?.onPhotoEvent(event)
                         } finally {
+                            try {
+                                outputStream?.close()
+                            } catch (e: IOException) {
+                                //NOOP
+                            }
                             try {
                                 image.close()
                             } catch (e: Exception) {
@@ -950,6 +1003,40 @@ internal class Camera2(private val mContext: Context, private val textureView: T
         } else {
             imageCapture?.takePicture(file!!, meta, executorService, object : ImageCapture.OnImageSavedListener {
                 override fun onImageSaved(file: File) {
+                    val exif = ExifInterface(file.absolutePath)
+
+                    if (imageCaptureConfig.lensFacing == CameraX.LensFacing.BACK) {
+                        if (currentOrientation == 90) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_180.toString())
+                        }
+
+                        if (currentOrientation == 270) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                        }
+
+                        if (currentOrientation == 180) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_270.toString())
+                        }
+                    }
+
+                    if (imageCaptureConfig.lensFacing == CameraX.LensFacing.FRONT) {
+                        if (currentOrientation == 90) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_180.toString())
+                        }
+
+                        if (currentOrientation == 270) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+                        }
+
+                        if (currentOrientation == 180) {
+                            exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_90.toString())
+                        }
+                    }
+                    try {
+                        exif.saveAttributes()
+                    } catch (e: IOException) {
+
+                    }
                     val event = PhotoEvent(EventType.INFO, file, PhotoEvent.EventInfo.PHOTO_TAKEN.toString())
                     listener?.onPhotoEvent(event)
                 }
@@ -1003,17 +1090,21 @@ internal class Camera2(private val mContext: Context, private val textureView: T
 
 
     override fun toggleCamera() {
-        if (mPosition == FancyCamera.CameraPosition.BACK) {
-            mPosition = FancyCamera.CameraPosition.FRONT
+        mPosition = if (mPosition == FancyCamera.CameraPosition.BACK) {
+            FancyCamera.CameraPosition.FRONT
         } else {
-            mPosition = FancyCamera.CameraPosition.BACK
+            FancyCamera.CameraPosition.BACK
         }
         refreshCamera()
     }
 
 
     override fun release() {
-        CameraX.unbindAll()
+        safeUnbindAll()
+        preview?.removePreviewOutputListener()
+        imageCapture = null
+        videoCapture = null
+        preview = null
     }
 
 

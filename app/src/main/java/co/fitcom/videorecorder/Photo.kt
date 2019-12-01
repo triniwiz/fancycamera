@@ -53,6 +53,7 @@ class Photo : AppCompatActivity() {
 
         })
         cameraView.saveToGallery = true
+       // cameraView.autoSquareCrop = true
     }
 
     fun takePhoto(view: View) {
