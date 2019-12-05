@@ -3,8 +3,6 @@ package co.fitcom.videorecorder
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 
 import androidx.appcompat.app.AppCompatActivity
@@ -16,8 +14,7 @@ import android.widget.ImageView
 import co.fitcom.fancycamera.CameraEventListenerUI
 import co.fitcom.fancycamera.EventType
 import co.fitcom.fancycamera.FancyCamera
-import co.fitcom.fancycamera.PhotoEvent
-import co.fitcom.fancycamera.VideoEvent
+import co.fitcom.fancycamera.Event
 
 class Photo : AppCompatActivity() {
     internal lateinit var cameraView: FancyCamera
@@ -29,7 +26,7 @@ class Photo : AppCompatActivity() {
 
         imageView = findViewById(R.id.imageView)
         cameraView = findViewById(R.id.PhotoView)
-        cameraView.setQuality(FancyCamera.Quality.HIGHEST.value)
+        cameraView.quality = FancyCamera.Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onCameraOpenUI() {
 
@@ -39,21 +36,17 @@ class Photo : AppCompatActivity() {
 
             }
 
-            override fun onPhotoEventUI(event: PhotoEvent) {
-                if (event.type === EventType.INFO && event.message == PhotoEvent.EventInfo.PHOTO_TAKEN.toString()) {
+            override fun onEventUI(event: Event) {
+                if (event.type === EventType.Photo && event.file != null) {
                     imageView.setImageURI(Uri.fromFile(event.file!!))
                 } else {
                     println(event.message)
                 }
             }
 
-            override fun onVideoEventUI(event: VideoEvent) {
-
-            }
-
         })
         cameraView.saveToGallery = true
-       // cameraView.autoSquareCrop = true
+        // cameraView.autoSquareCrop = true
     }
 
     fun takePhoto(view: View) {
@@ -78,6 +71,7 @@ class Photo : AppCompatActivity() {
     }
 
     override fun onPause() {
+        cameraView.stop()
         super.onPause()
     }
 

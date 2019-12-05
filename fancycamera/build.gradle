@@ -9,7 +9,7 @@ group = 'co.fitcom.fancycamera'
 ext {
     PUBLISH_GROUP_ID = 'co.fitcom'
     PUBLISH_ARTIFACT_ID = 'fancycamera'
-    PUBLISH_VERSION = '2.0.0-alpha2'
+    PUBLISH_VERSION = '2.0.0-alpha3'
 }
 
 android {
@@ -51,6 +51,9 @@ dependencies {
     api "androidx.camera:camera-camera2:$camerax_version"
     api "androidx.camera:camera-view:$camerax_view_version"
     api "androidx.camera:camera-extensions:$camerax_ext_version"
+    api "androidx.camera:camera-lifecycle:$camerax_lifecycle_version"
+    api 'com.google.guava:guava:28.0-android'
+
     api "androidx.core:core-ktx:1.1.0"
     api "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
     api "androidx.exifinterface:exifinterface:1.1.0"
@@ -61,7 +64,7 @@ publish {
     userOrg = 'triniwiz'
     groupId = 'co.fitcom'
     artifactId = 'fancycamera'
-    publishVersion = '2.0.0-alpha2`                                                                                                                                                                                                                         '
+    publishVersion = '2.0.0-alpha3`                                                                                                                                                                                                                         '
     desc = ''
     website = ''
 }

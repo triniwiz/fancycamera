@@ -10,6 +10,5 @@ package co.fitcom.fancycamera
 interface CameraEventListener {
     fun onCameraOpen()
     fun onCameraClose()
-    fun onPhotoEvent(event: PhotoEvent)
-    fun onVideoEvent(event: VideoEvent)
+    fun onEvent(event: Event)
 }
