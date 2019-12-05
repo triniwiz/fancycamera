@@ -17,8 +17,7 @@ import java.util.TimerTask
 import co.fitcom.fancycamera.CameraEventListenerUI
 import co.fitcom.fancycamera.EventType
 import co.fitcom.fancycamera.FancyCamera
-import co.fitcom.fancycamera.PhotoEvent
-import co.fitcom.fancycamera.VideoEvent
+import co.fitcom.fancycamera.Event
 
 class MainActivity : AppCompatActivity() {
     internal lateinit var cameraView: FancyCamera
@@ -35,8 +34,8 @@ class MainActivity : AppCompatActivity() {
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
         cameraView = findViewById(R.id.cameraView)
-        cameraView.setCameraPosition(FancyCamera.CameraPosition.BACK)
-        cameraView.setQuality(FancyCamera.Quality.HIGHEST.value)
+        cameraView.cameraPosition = FancyCamera.CameraPosition.BACK
+        cameraView.quality = FancyCamera.Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onCameraOpenUI() {
                 Log.d("co.fitcom.test", "Camera Opened")
@@ -45,18 +44,13 @@ class MainActivity : AppCompatActivity() {
             override fun onCameraCloseUI() {
                 Log.d("co.fitcom.test", "Camera Close")
             }
-
-            override fun onPhotoEventUI(event: PhotoEvent) {
-
-            }
-
-            override fun onVideoEventUI(event: VideoEvent) {
-                if (event.type === EventType.INFO && event.message == VideoEvent.EventInfo.RECORDING_FINISHED.toString()) {
+            override fun onEventUI(event: Event) {
+                if (event.type === EventType.Video && event.message == null && event.file != null) {
                     timerTask!!.cancel()
                     timer.cancel()
                     videoPlayer.setVideoURI(Uri.fromFile(event.file))
                     videoPlayer.start()
-                } else if (event.type === EventType.INFO && event.message == VideoEvent.EventInfo.RECORDING_STARTED.toString()) {
+                } else if (event.type === EventType.Video && event.message == null  && event.file == null) {
                     println("Recording Started")
                     timer = Timer()
                     timerTask = object : TimerTask() {
@@ -76,7 +70,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startRecording(view: View) {
-        cameraView.setQuality(FancyCamera.Quality.MAX_720P.value)
+        cameraView.quality = FancyCamera.Quality.MAX_720P
         cameraView.startRecording()
     }
 
@@ -104,6 +98,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        cameraView.stop()
         super.onPause()
         if (levelsTask != null) {
             levelsTask!!.cancel()

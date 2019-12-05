@@ -7,8 +7,7 @@
 
 package co.fitcom.fancycamera
 
+import java.io.File
 
-enum class EventType {
-    Photo,
-    Video
-}
+
+class Event constructor(val type: EventType, val file: File?, val message: String?)

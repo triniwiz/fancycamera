@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
-import android.util.Log
 
 import java.io.File
 
@@ -35,17 +34,11 @@ abstract class CameraEventListenerUI : CameraEventListener {
                         val message = eventData.getString(MESSAGE)
                         var file: File? = null
                         when (msg.what) {
-                            WHAT_PHOTO_EVENT -> {
+                            WHAT_EVENT -> {
                                 if (eventData.getString(FILE) != null) {
                                     file = File(eventData.getString(FILE)!!)
                                 }
-                                onPhotoEventUI(PhotoEvent(type, file, message))
-                            }
-                            WHAT_VIDEO_EVENT -> {
-                                if (eventData.getString(FILE) != null) {
-                                    file = File(eventData.getString(FILE)!!)
-                                }
-                                onVideoEventUI(VideoEvent(type, file, message))
+                                onEventUI(Event(type, file, message))
                             }
                             WHAT_CAMERA_CLOSE_EVENT -> onCameraCloseUI()
                             WHAT_CAMERA_OPEN_EVENT -> onCameraOpenUI()
@@ -57,37 +50,19 @@ abstract class CameraEventListenerUI : CameraEventListener {
     }
 
 
-    override fun onPhotoEvent(event: PhotoEvent) {
+    override fun onEvent(event: Event) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            onPhotoEventUI(event)
+            onEventUI(event)
             return
         }
         ensureHandler()
         val message = handler!!.obtainMessage()
-        message.what = WHAT_PHOTO_EVENT
+        message.what = WHAT_EVENT
         val bundle = Bundle()
         bundle.putString(MESSAGE, event.message)
         bundle.putSerializable(TYPE, event.type)
         if (event.file != null) {
-            bundle.putString(FILE, event.file!!.path)
-        }
-        message.data = bundle
-        handler!!.sendMessage(message)
-    }
-
-    override fun onVideoEvent(event: VideoEvent) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            onVideoEventUI(event)
-            return
-        }
-        ensureHandler()
-        val message = handler!!.obtainMessage()
-        message.what = WHAT_VIDEO_EVENT
-        val bundle = Bundle()
-        bundle.putString(MESSAGE, event.message)
-        bundle.putSerializable(TYPE, event.type)
-        if (event.file != null) {
-            bundle.putString(FILE, event.file!!.path)
+            bundle.putString(FILE, event.file.path)
         }
         message.data = bundle
         handler!!.sendMessage(message)
@@ -123,15 +98,13 @@ abstract class CameraEventListenerUI : CameraEventListener {
 
     abstract fun onCameraCloseUI()
 
-    abstract fun onPhotoEventUI(event: PhotoEvent)
+    abstract fun onEventUI(event: Event)
 
-    abstract fun onVideoEventUI(event: VideoEvent)
 
     companion object {
-        private val WHAT_PHOTO_EVENT = 0x01
-        private val WHAT_VIDEO_EVENT = 0x02
-        private val WHAT_CAMERA_CLOSE_EVENT = 0x03
-        private val WHAT_CAMERA_OPEN_EVENT = 0x04
+        private val WHAT_EVENT = 0x01
+        private val WHAT_CAMERA_CLOSE_EVENT = 0x02
+        private val WHAT_CAMERA_OPEN_EVENT = 0x03
         private val MESSAGE = "message"
         private val TYPE = "type"
         private val FILE = "file"
