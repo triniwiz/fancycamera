@@ -98,6 +98,7 @@ class FancyCamera : PreviewView {
                         if (mCameraSelector!!.lensFacing!! != lens) {
                             field = position
                             safeUnbindAll()
+                            listener?.onCameraClose()
                             refreshCamera()
                         }
                     } else {
@@ -256,6 +257,9 @@ class FancyCamera : PreviewView {
     }
 
     private fun refreshCamera() {
+        if (!hasPermission()) {
+            return;
+        }
         try {
             val lensFacing = when (cameraPosition) {
                 CameraPosition.FRONT -> {
@@ -319,11 +323,15 @@ class FancyCamera : PreviewView {
             synchronized(mLock) {
                 mCamera = processCameraProvider?.bindToLifecycle(context as LifecycleOwner, mCameraSelector!!, mPreview!!, mImageCapture!!, mVideoCapture!!)
                 listener?.onCameraOpen()
+                isStarted = true
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            isStarted = false
         }
     }
+
+    private var isStarted = false
 
     private fun getCamcorderProfile(quality: Quality): CamcorderProfile {
         var profile = CamcorderProfile.get(CamcorderProfile.QUALITY_LOW)
@@ -612,6 +620,7 @@ class FancyCamera : PreviewView {
             if (!isRecording && field != value) {
                 field = value
                 safeUnbindAll()
+                listener?.onCameraClose()
                 refreshCamera()
             }
         }
@@ -621,7 +630,9 @@ class FancyCamera : PreviewView {
     }
 
     fun start() {
-
+        if (!isStarted) {
+            refreshCamera()
+        }
     }
 
     fun stopRecording() {
@@ -653,6 +664,7 @@ class FancyCamera : PreviewView {
                         }
                         ContextCompat.getMainExecutor(context).execute {
                             safeUnbindAll()
+                            listener?.onCameraClose()
                         }
                         synchronized(mLock) {
                             isForceStopping = false
@@ -713,6 +725,7 @@ class FancyCamera : PreviewView {
                 stopRecording()
             } else {
                 safeUnbindAll()
+                listener?.onCameraClose()
             }
         }
     }
@@ -721,6 +734,7 @@ class FancyCamera : PreviewView {
         stop()
         if (!isForceStopping) {
             safeUnbindAll()
+            listener?.onCameraClose()
             mPreview?.previewSurfaceProvider = null
             mPreview = null
             mImageCapture = null
@@ -735,6 +749,8 @@ class FancyCamera : PreviewView {
             processCameraProvider?.unbindAll()
         } catch (e: Exception) {
             e.printStackTrace()
+        } finally {
+            isStarted = false
         }
     }
 
