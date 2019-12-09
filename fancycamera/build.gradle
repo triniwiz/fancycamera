@@ -9,7 +9,7 @@ group = 'co.fitcom.fancycamera'
 ext {
     PUBLISH_GROUP_ID = 'co.fitcom'
     PUBLISH_ARTIFACT_ID = 'fancycamera'
-    PUBLISH_VERSION = '2.0.0-alpha3'
+    PUBLISH_VERSION = '2.0.0-alpha4'
 }
 
 android {
@@ -64,7 +64,7 @@ publish {
     userOrg = 'triniwiz'
     groupId = 'co.fitcom'
     artifactId = 'fancycamera'
-    publishVersion = '2.0.0-alpha3`                                                                                                                                                                                                                         '
+    publishVersion = '2.0.0-alpha4`                                                                                                                                                                                                                         '
     desc = ''
     website = ''
 }
