@@ -110,6 +110,19 @@ class MainActivity : AppCompatActivity() {
         levelsTask = null
     }
 
+
+    override fun onResume() {
+        super.onResume()
+        if(!cameraView.hasPermission()){
+            cameraView.requestPermission()
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        cameraView.onPermissionHandler(requestCode, permissions as Array<String>,grantResults  )
+    }
+
     internal fun start() {
         if (cameraView.isAudioLevelsEnabled) {
             if (levelsTask == null) {

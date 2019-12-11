@@ -247,17 +247,22 @@ class FancyCamera : PreviewView {
         }.enable()
         Futures.addCallback(mCameraProviderFuture, object : FutureCallback<ProcessCameraProvider> {
             override fun onSuccess(result: ProcessCameraProvider?) {
-                processCameraProvider = result
-                refreshCamera()
+                synchronized(mLock){
+                    processCameraProvider = result
+                    safeUnbindAll()
+                    refreshCamera()
+                }
             }
 
             override fun onFailure(t: Throwable?) {
+                t?.printStackTrace()
+                listener?.onEvent(Event(EventType.Photo,null,t?.message))
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
     private fun refreshCamera() {
-        if (!hasPermission()) {
+        if (!hasCameraPermission()) {
             return;
         }
         try {
@@ -640,6 +645,9 @@ class FancyCamera : PreviewView {
     }
 
     fun startRecording() {
+        if(!hasAudioPermission()){
+            return
+        }
         deInitListener()
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
@@ -817,14 +825,32 @@ class FancyCamera : PreviewView {
         ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 868)
     }
 
+    fun requestCameraPermission() {
+        ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.CAMERA), VIDEO_RECORDER_PERMISSIONS_REQUEST)
+    }
+
+    fun requestAudioPermission() {
+        ActivityCompat.requestPermissions(context as Activity, arrayOf(Manifest.permission.RECORD_AUDIO), VIDEO_RECORDER_PERMISSIONS_REQUEST)
+    }
+
     fun requestPermission() {
         ActivityCompat.requestPermissions(context as Activity, VIDEO_RECORDER_PERMISSIONS, VIDEO_RECORDER_PERMISSIONS_REQUEST)
     }
 
     fun hasPermission(): Boolean {
+        return hasCameraPermission() && hasAudioPermission()
+    }
+
+    fun hasCameraPermission(): Boolean {
         return if (Build.VERSION.SDK_INT < 23) {
             true
-        } else ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED && ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        } else ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun hasAudioPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT < 23) {
+            true
+        } else ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
     fun toggleCamera() {
@@ -836,6 +862,12 @@ class FancyCamera : PreviewView {
 
     fun setEnableAudioLevels(enableAudioLevels: Boolean) {
 
+    }
+
+    fun onPermissionHandler(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        if (hasPermission() || hasCameraPermission()) {
+            start()
+        }
     }
 
     companion object {
