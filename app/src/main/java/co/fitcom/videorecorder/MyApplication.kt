@@ -11,6 +11,6 @@ import co.fitcom.fancycamera.FancyCamera
  */
 class MyApplication : Application(), CameraProvider {
     override fun getCameraXConfig(): CameraXConfig {
-        return FancyCamera.defaultConfig(this)
+        return FancyCamera.defaultConfig()
     }
 }

@@ -91,8 +91,8 @@ class FancyCamera : PreviewView {
             if (!isRecording) {
                 if (position != field) {
                     val lens = when (position) {
-                        CameraPosition.BACK -> LensFacing.BACK
-                        CameraPosition.FRONT -> LensFacing.FRONT
+                        CameraPosition.BACK -> CameraSelector.LENS_FACING_BACK
+                        CameraPosition.FRONT -> CameraSelector.LENS_FACING_FRONT
                     }
                     if (mCameraSelector != null) {
                         if (mCameraSelector!!.lensFacing!! != lens) {
@@ -268,10 +268,10 @@ class FancyCamera : PreviewView {
         try {
             val lensFacing = when (cameraPosition) {
                 CameraPosition.FRONT -> {
-                    LensFacing.FRONT
+                    CameraSelector.LENS_FACING_FRONT
                 }
                 CameraPosition.BACK -> {
-                    LensFacing.BACK
+                    CameraSelector.LENS_FACING_BACK
                 }
             }
             val profile = getCamcorderProfile(quality)
@@ -288,13 +288,13 @@ class FancyCamera : PreviewView {
             mCameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
             mImageCapture = ImageCapture.Builder()
                     .apply {
-                        setCaptureMode(ImageCapture.CaptureMode.MINIMIZE_LATENCY)
+                        setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                         if (cameraOrientation > -1) {
                             setTargetRotation(cameraOrientation)
                         }
                         setFlashMode(when (mFlashEnabled) {
-                            true -> FlashMode.ON
-                            else -> FlashMode.OFF
+                            true -> ImageCapture.FLASH_MODE_ON
+                            else -> ImageCapture.FLASH_MODE_OFF
                         })
                     }.build()
 
@@ -400,21 +400,21 @@ class FancyCamera : PreviewView {
 
     fun toggleFlash() {
         if (mFlashEnabled) {
-            mImageCapture?.flashMode = FlashMode.OFF
+            mImageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
             mFlashEnabled = false
         } else {
-            mImageCapture?.flashMode = FlashMode.ON
+            mImageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
             mFlashEnabled = true
         }
     }
 
     fun enableFlash() {
-        mImageCapture?.flashMode = FlashMode.ON
+        mImageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
         mFlashEnabled = true
     }
 
     fun disableFlash() {
-        mImageCapture?.flashMode = FlashMode.OFF
+        mImageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
         mFlashEnabled = false
     }
 
@@ -441,12 +441,12 @@ class FancyCamera : PreviewView {
         }
 
         val meta = ImageCapture.Metadata().apply {
-            isReversedHorizontal = mCameraSelector?.lensFacing == LensFacing.FRONT
+            isReversedHorizontal = mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_FRONT
         }
 
         if (autoSquareCrop) {
             mImageCapture?.takePicture(executorService, object : ImageCapture.OnImageCapturedCallback() {
-                override fun onCaptureSuccess(image: ImageProxy, rotationDegrees: Int) {
+                override fun onCaptureSuccess(image: ImageProxy) {
                     var isError = false
                     var outputStream: FileOutputStream? = null
                     try {
@@ -456,10 +456,9 @@ class FancyCamera : PreviewView {
 
                         val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         val matrix = Matrix()
+                        matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
 
-                        matrix.postRotate(rotationDegrees.toFloat())
-
-                        if (mCameraSelector?.lensFacing == LensFacing.BACK) {
+                        if (mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_BACK) {
                             if (currentOrientation == 90) {
                                 matrix.postRotate(90f)
                             }
@@ -473,7 +472,7 @@ class FancyCamera : PreviewView {
                             }
                         }
 
-                        if (mCameraSelector?.lensFacing == LensFacing.FRONT) {
+                        if (mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_FRONT) {
                             if (currentOrientation == 90) {
                                 matrix.postRotate(270f)
                             }
@@ -527,7 +526,7 @@ class FancyCamera : PreviewView {
                         } catch (e: ParseException) {
                         }
 
-                        exif.rotate(rotationDegrees)
+                        exif.rotate(image.imageInfo.rotationDegrees)
                         if (meta.isReversedHorizontal) {
                             exif.flipHorizontally()
                         }
@@ -578,7 +577,7 @@ class FancyCamera : PreviewView {
             mImageCapture?.takePicture(file!!, meta, executorService, object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(file: File) {
                     val exif = ExifInterface(file.absolutePath)
-                    if (mCameraSelector?.lensFacing == LensFacing.BACK) {
+                    if (mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_BACK) {
                         if (currentOrientation == 90) {
                             exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_180.toString())
                         }
@@ -592,7 +591,7 @@ class FancyCamera : PreviewView {
                         }
                     }
 
-                    if (mCameraSelector?.lensFacing == LensFacing.FRONT) {
+                    if (mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_FRONT) {
                         if (currentOrientation == 90) {
                             exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_180.toString())
                         }
@@ -876,8 +875,8 @@ class FancyCamera : PreviewView {
         val executorService = Executors.newSingleThreadExecutor()
 
         @JvmStatic
-        fun defaultConfig(context: Context): CameraXConfig {
-            return Camera2Config.defaultConfig(context)
+        fun defaultConfig(): CameraXConfig {
+            return Camera2Config.defaultConfig()
         }
 
         private val TAG = "FancyCamera"
