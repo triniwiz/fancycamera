@@ -10,6 +10,8 @@ package co.fitcom.fancycamera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -17,11 +19,15 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.hardware.camera2.CameraManager
 import android.media.CamcorderProfile
 import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.provider.MediaStore
+import android.provider.MediaStore.Audio.Media.getContentUriForPath
 import android.util.AttributeSet
 import android.util.Log
 import android.util.Size
@@ -29,7 +35,12 @@ import android.util.SparseIntArray
 import android.view.OrientationEventListener
 import android.view.Surface
 import androidx.camera.camera2.Camera2Config
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
+import androidx.camera.core.impl.CameraFactory
+import androidx.camera.core.impl.CameraThreadConfig
+import androidx.camera.core.impl.VideoCaptureConfig
+import androidx.camera.core.impl.utils.executor.CameraXExecutors
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
@@ -39,9 +50,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
+import java.io.*
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
@@ -65,15 +74,10 @@ class FancyCamera : PreviewView {
     private var mTimer: Timer? = null
     private var mTimerTask: TimerTask? = null
     var duration = 0
+    lateinit var mCameraManager: CameraManager
     val numberOfCameras: Int
         get() {
-            var count = 0
-            try {
-                count = CameraX.getCameraFactory().availableCameraIds.size
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            return count
+          return mCameraManager.cameraIdList.size
         }
 
     var autoSquareCrop = false
@@ -212,6 +216,7 @@ class FancyCamera : PreviewView {
 
     private fun init(context: Context, attrs: AttributeSet?) {
         mCameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        mCameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager;
         if (attrs != null) {
             val a = context.obtainStyledAttributes(
                     attrs,
@@ -245,25 +250,26 @@ class FancyCamera : PreviewView {
                 }
             }
         }.enable()
-        Futures.addCallback(mCameraProviderFuture, object : FutureCallback<ProcessCameraProvider> {
-            override fun onSuccess(result: ProcessCameraProvider?) {
-                synchronized(mLock){
-                    processCameraProvider = result
-                    safeUnbindAll()
+        mCameraProviderFuture.addListener(Runnable {
+            val provider = mCameraProviderFuture.get()
+            synchronized(mLock) {
+                processCameraProvider = provider
+                try {
+                    processCameraProvider?.unbindAll()
                     refreshCamera()
+                } catch (e: Exception) {
+                    listener?.onEvent(Event(EventType.Photo, null, e.message))
+                    isStarted = false
                 }
+
             }
 
-            override fun onFailure(t: Throwable?) {
-                t?.printStackTrace()
-                listener?.onEvent(Event(EventType.Photo,null,t?.message))
-            }
         }, ContextCompat.getMainExecutor(context))
     }
 
     private fun refreshCamera() {
         if (!hasCameraPermission()) {
-            return;
+            return
         }
         try {
             val lensFacing = when (cameraPosition) {
@@ -284,7 +290,6 @@ class FancyCamera : PreviewView {
                 else -> -1
             }
             mPreview = Preview.Builder().build()
-            mPreview?.previewSurfaceProvider = previewSurfaceProvider
             mCameraSelector = CameraSelector.Builder().requireLensFacing(lensFacing).build()
             mImageCapture = ImageCapture.Builder()
                     .apply {
@@ -298,7 +303,7 @@ class FancyCamera : PreviewView {
                         })
                     }.build()
 
-            mVideoCapture = VideoCaptureConfig.Builder()
+            mVideoCapture = VideoCapture.Builder()
                     .apply {
                         if (cameraOrientation != -1) {
                             setTargetRotation(cameraOrientation)
@@ -326,7 +331,8 @@ class FancyCamera : PreviewView {
                     .build()
 
             synchronized(mLock) {
-                mCamera = processCameraProvider?.bindToLifecycle(context as LifecycleOwner, mCameraSelector!!, mPreview!!, mImageCapture!!, mVideoCapture!!)
+                mCamera = processCameraProvider?.bindToLifecycle(context as LifecycleOwner, mCameraSelector!!, mPreview!!)
+                mPreview?.setSurfaceProvider(this.createSurfaceProvider())
                 listener?.onCameraOpen()
                 isStarted = true
             }
@@ -430,20 +436,37 @@ class FancyCamera : PreviewView {
     fun takePhoto() {
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
+        val fileName = "PIC_" + df.format(today) + ".jpg"
         if (saveToGallery && hasStoragePermission()) {
-            val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
-            if (!cameraDir.exists()) {
-                cameraDir.mkdirs()
+            val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
+            if (externalDir == null) {
+                listener?.onEvent(Event(EventType.Photo, null, "Cannot save to gallery storage state"))
+                return
+            } else {
+                if (!externalDir.exists()) {
+                    externalDir.mkdirs()
+                }
+                file = File(externalDir, fileName)
             }
-            file = File(cameraDir, "PIC_" + df.format(today) + ".jpg")
+
         } else {
-            file = File(context.getExternalFilesDir(null), "PIC_" + df.format(today) + ".jpg")
+            file = File(context.getExternalFilesDir(null), fileName)
         }
+
 
         val meta = ImageCapture.Metadata().apply {
             isReversedHorizontal = mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_FRONT
         }
 
+
+        if (processCameraProvider != null) {
+            if (processCameraProvider!!.isBound(mVideoCapture!!)) {
+                processCameraProvider?.unbind(mVideoCapture!!)
+            }
+            if (!processCameraProvider!!.isBound(mImageCapture!!)) {
+                processCameraProvider?.bindToLifecycle(context as LifecycleOwner, mCameraSelector!!, mImageCapture!!)
+            }
+        }
         if (autoSquareCrop) {
             mImageCapture?.takePicture(executorService, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
@@ -503,10 +526,6 @@ class FancyCamera : PreviewView {
                         }
                         val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
 
-                        val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera");
-                        if (!cameraDir.exists()) {
-                            cameraDir.mkdirs();
-                        }
                         outputStream = FileOutputStream(file!!, false)
                         rotated.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
 
@@ -556,14 +575,44 @@ class FancyCamera : PreviewView {
                         }
                         if (!isError) {
                             if (saveToGallery && hasStoragePermission()) {
-                                val contentUri = Uri.fromFile(file)
-                                val mediaScanIntent = Intent(
-                                        "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                                        contentUri
-                                )
-                                context.sendBroadcast(mediaScanIntent)
+                                val values = ContentValues().apply {
+                                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                    put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+                                    put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                                        put(MediaStore.MediaColumns.IS_PENDING, 1)
+                                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                                    }
+                                }
+
+                                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                                if (uri == null) {
+                                    listener?.onEvent(Event(EventType.Photo, null, "Failed to add video to gallery"))
+                                } else {
+                                    val fos = context.contentResolver.openOutputStream(uri)
+                                    val fis = FileInputStream(file!!)
+                                    fos.use {
+                                        if (it != null) {
+                                            fis.copyTo(it)
+                                            it.flush()
+                                            it.close()
+                                            fis.close()
+                                        }
+                                    }
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                        values.clear();
+                                        values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                                        context.contentResolver.update(uri, values, null, null);
+                                    }
+                                    listener?.onEvent(Event(EventType.Photo, file!!, null))
+                                }
+
+                            } else {
+                                listener?.onEvent(Event(EventType.Photo, file!!, null))
+                                file = null
                             }
-                            listener?.onEvent(Event(EventType.Photo, file, null))
+
                         }
                     }
 
@@ -574,9 +623,11 @@ class FancyCamera : PreviewView {
                 }
             })
         } else {
-            mImageCapture?.takePicture(file!!, meta, executorService, object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(file: File) {
-                    val exif = ExifInterface(file.absolutePath)
+            val options = ImageCapture.OutputFileOptions.Builder(file!!)
+            options.setMetadata(meta)
+            mImageCapture?.takePicture(options.build(), executorService, object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    val exif = ExifInterface(file!!.absolutePath)
                     if (mCameraSelector?.lensFacing == CameraSelector.LENS_FACING_BACK) {
                         if (currentOrientation == 90) {
                             exif.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_ROTATE_180.toString())
@@ -609,11 +660,51 @@ class FancyCamera : PreviewView {
                     } catch (e: IOException) {
 
                     }
-                    listener?.onEvent(Event(EventType.Photo, file, null))
+
+
+                    if (saveToGallery && hasStoragePermission()) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                            put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+                            // hardcoded video/avc
+                            put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                                put(MediaStore.MediaColumns.IS_PENDING, 1)
+                                put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                            }
+                        }
+
+                        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                        if (uri == null) {
+                            listener?.onEvent(Event(EventType.Photo, null, "Failed to add video to gallery"))
+                        } else {
+                            val fos = context.contentResolver.openOutputStream(uri)
+                            val fis = FileInputStream(file!!)
+                            fos.use {
+                                if (it != null) {
+                                    fis.copyTo(it)
+                                    it.flush()
+                                    it.close()
+                                    fis.close()
+                                }
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                values.clear()
+                                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                                context.contentResolver.update(uri, values, null, null)
+                            }
+                            listener?.onEvent(Event(EventType.Photo, file!!, null))
+                        }
+
+                    } else {
+                        listener?.onEvent(Event(EventType.Photo, file!!, null))
+                        file = null
+                    }
                 }
 
-                override fun onError(imageCaptureError: Int, message: String, cause: Throwable?) {
-                    listener?.onEvent(Event(EventType.Photo, null, message))
+                override fun onError(exception: ImageCaptureException) {
+                    listener?.onEvent(Event(EventType.Photo, null, exception.message))
                 }
             })
         }
@@ -644,24 +735,42 @@ class FancyCamera : PreviewView {
     }
 
     fun startRecording() {
-        if(!hasAudioPermission()){
+        if (!hasAudioPermission()) {
             return
         }
         deInitListener()
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
+        val fileName = "VID_" + df.format(today) + ".mp4"
         if (saveToGallery && hasStoragePermission()) {
-            val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
-            if (!cameraDir.exists()) {
-                cameraDir.mkdirs()
+            val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
+            if (externalDir == null) {
+                listener?.onEvent(Event(EventType.Video, null, "Cannot save to gallery storage state"))
+                return
+            } else {
+                if (!externalDir.exists()) {
+                    externalDir.mkdirs()
+                }
+                file = File(externalDir, fileName)
             }
-            file = File(cameraDir, "VID_" + df.format(today) + ".mp4")
+
         } else {
-            file = File(context.getExternalFilesDir(null), "VID_" + df.format(today) + ".mp4")
+            file = File(context.getExternalFilesDir(null), fileName)
         }
+
         try {
+            if (processCameraProvider != null) {
+                if (!processCameraProvider!!.isBound(mVideoCapture!!)) {
+                    processCameraProvider?.bindToLifecycle(context as LifecycleOwner, mCameraSelector!!, mVideoCapture!!)
+                }
+                if (processCameraProvider!!.isBound(mImageCapture!!)) {
+                    processCameraProvider?.unbind(mImageCapture!!)
+                }
+            }
+
             mVideoCapture?.startRecording(file!!, executorService, object : VideoCapture.OnVideoSavedCallback {
                 override fun onVideoSaved(videoFile: File) {
+
                     isRecording = false
                     stopDurationTimer()
 
@@ -676,19 +785,48 @@ class FancyCamera : PreviewView {
                         synchronized(mLock) {
                             isForceStopping = false
                         }
-                    }
+                    } else {
+                        if (saveToGallery && hasStoragePermission()) {
+                            val values = ContentValues().apply {
+                                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                                put(MediaStore.Video.Media.DATE_ADDED, System.currentTimeMillis())
+                                // hardcoded video/avc
+                                put(MediaStore.MediaColumns.MIME_TYPE, "video/avc")
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                                    put(MediaStore.Video.Media.DATE_TAKEN, System.currentTimeMillis())
+                                }
 
-                    if (file != null && saveToGallery && hasStoragePermission()) {
-                        val contentUri = Uri.fromFile(file)
-                        val mediaScanIntent = Intent(
-                                "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-                                contentUri
-                        )
-                        context.sendBroadcast(mediaScanIntent)
-                    }
+                            }
 
-                    listener?.onEvent(Event(EventType.Video, videoFile, null))
-                    file = null
+                            val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                            if (uri == null) {
+                                listener?.onEvent(Event(EventType.Video, null, "Failed to add video to gallery"))
+                            } else {
+                                val fos = context.contentResolver.openOutputStream(uri)
+                                val fis = FileInputStream(file!!)
+                                fos.use {
+                                    if (it != null) {
+                                        fis.copyTo(it)
+                                        it.flush()
+                                        it.close()
+                                        fis.close()
+                                    }
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                                    values.clear();
+                                    values.put(MediaStore.Video.Media.IS_PENDING, 0);
+                                    context.contentResolver.update(uri, values, null, null);
+                                }
+                                listener?.onEvent(Event(EventType.Video, videoFile, null))
+                            }
+
+                        } else {
+                            listener?.onEvent(Event(EventType.Video, videoFile, null))
+                            file = null
+                        }
+                    }
                 }
 
 
@@ -742,7 +880,7 @@ class FancyCamera : PreviewView {
         if (!isForceStopping) {
             safeUnbindAll()
             listener?.onCameraClose()
-            mPreview?.previewSurfaceProvider = null
+            mPreview?.setSurfaceProvider(null)
             mPreview = null
             mImageCapture = null
             mVideoCapture = null
@@ -864,13 +1002,16 @@ class FancyCamera : PreviewView {
     }
 
     fun onPermissionHandler(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        Log.d("com.test", "onPermissionHandler " + (hasPermission() || hasCameraPermission()).toString())
         if (hasPermission() || hasCameraPermission()) {
+            Log.d("com.test", "onPermissionHandler")
             start()
         }
     }
 
     companion object {
         private val EMA_FILTER = 0.6
+
         @JvmStatic
         val executorService = Executors.newSingleThreadExecutor()
 
