@@ -115,6 +115,8 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         if(!cameraView.hasPermission()){
             cameraView.requestPermission()
+        }else {
+            cameraView.start()
         }
     }
 
