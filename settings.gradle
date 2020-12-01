@@ -1,1 +1,7 @@
+include ':objectDetection'
+include ':imageLabeling'
+include ':barcodeScanning'
+include ':poseDetection'
+include ':textRecognition'
+include ':faceDetection'
 include ':app', ':fancycamera'
