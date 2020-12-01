@@ -117,20 +117,42 @@
         app:layout_constraintTop_toBottomOf="@+id/flashBtn"
         app:layout_constraintVertical_bias="1.0" />
 
-    <co.fitcom.fancycamera.FancyCamera
-        android:id="@+id/cameraView"
+    <RelativeLayout
+        android:id="@+id/container"
         android:layout_width="match_parent"
         android:layout_height="150dp"
         android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
         android:layout_marginEnd="16dp"
         android:orientation="vertical"
-        app:cameraPosition="front"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHorizontal_bias="0.0"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:saveToGallery="true" />
+        />
+
+    <Button
+        android:id="@+id/startPreview"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:onClick="startPreview"
+        android:text="Start Preview"
+        app:layout_constraintBottom_toTopOf="@+id/videoPlayer"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/flashBtn"
+        app:layout_constraintVertical_bias="0.421" />
+
+    <Button
+        android:id="@+id/stopPreview"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="17dp"
+        android:onClick="stopPreview"
+        android:text="Stop Preview"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/startPreview" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

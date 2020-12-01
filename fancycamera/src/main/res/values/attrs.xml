@@ -12,7 +12,7 @@
             <enum name="lowest" value="5" />
             <enum name="qvga" value="6" />
         </attr>
-        <attr name="cameraPosition" format="enum">
+        <attr name="position" format="enum">
             <enum name="back" value="0" />
             <enum name="front" value="1" />
         </attr>

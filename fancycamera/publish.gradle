@@ -1,0 +1,50 @@
+apply plugin: 'maven-publish'
+apply plugin: 'com.jfrog.bintray'
+
+group 'com.github.triniwiz.fancycamera'
+version '3.0.0-alpha14'
+
+
+afterEvaluate {
+    publishing {
+        publications {
+            // Creates a Maven publication called "release".
+            release(MavenPublication) {
+                // Applies the component for the release build variant.
+                from components.release
+
+                // You can then customize attributes of the publication as shown below.
+                groupId = 'com.github.triniwiz'
+                artifactId = 'fancycamera'
+                version = '3.0.0-alpha14'
+            }
+        }
+    }
+}
+
+
+def properties = new Properties()
+properties.load(new FileInputStream(project.rootProject.file('local.properties')))
+
+bintray {
+    user = properties.getProperty("bintray.user")
+    key = properties.getProperty("bintray.apikey")
+    publications = ['release']
+    dryRun = false
+    publish = true
+    pkg {
+        repo = 'maven'
+        name = 'fancycamera'
+        description = "Fancy Android Camera"
+        publicDownloadNumbers = true
+        licenses = ['MIT']
+        issueTrackerUrl = 'https://github.com/triniwiz/fancycamera/issues'
+        vcsUrl = 'https://github.com/triniwiz/fancycamera'
+        version {
+            name = this.version
+            desc = "Version ${this.version}"
+            released = new Date()
+            vcsTag = this.version
+        }
+    }
+}

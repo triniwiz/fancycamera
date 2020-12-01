@@ -1,10 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="co.fitcom.fancycamera">
+    package="com.github.triniwiz.fancycamera">
 
     <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
 
     <uses-feature
         android:name="android.hardware.microphone"
@@ -16,7 +19,7 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
-
+    <uses-sdk tools:overrideLibrary="androidx.camera.view,androidx.camera.extensions,androidx.camera.camera2,androidx.camera.lifecycle,androidx.camera.core"/>
     <application>
         <provider
             android:name="androidx.core.content.FileProvider"
