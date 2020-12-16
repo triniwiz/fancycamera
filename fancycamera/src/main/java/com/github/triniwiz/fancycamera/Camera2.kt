@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
@@ -995,7 +996,9 @@ class Camera2 @JvmOverloads constructor(
                 cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), imageCapture!!)
             }
         }
-        if (autoSquareCrop) {
+
+        val processingNeeded = autoSquareCrop || position != CameraPosition.BACK || rotation != CameraOrientation.UNKNOWN
+        if (processingNeeded) {
             imageCapture?.takePicture(imageCaptureExecutor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     var isError = false
@@ -1007,37 +1010,40 @@ class Camera2 @JvmOverloads constructor(
 
                         val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                         val matrix = Matrix()
+                        // Registering image's original rotation
                         matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
 
-                        if (position == CameraPosition.BACK) {
-                            if (currentOrientation == 90) {
-                                matrix.postRotate(90f)
+                        // Registering additional rotation to match the phone's orientation
+                        val degrees = when (position) {
+                            CameraPosition.BACK -> when (rotation) {
+                                CameraOrientation.PORTRAIT -> 90f
+                                CameraOrientation.LANDSCAPE_RIGHT -> 180f
+                                CameraOrientation.PORTRAIT_UPSIDE_DOWN -> 270f
+                                else -> 0f
                             }
-
-                            if (currentOrientation == 270) {
-                                matrix.postRotate(270f)
+                            CameraPosition.FRONT -> when (rotation) {
+                                CameraOrientation.PORTRAIT -> 270f
+                                CameraOrientation.LANDSCAPE_RIGHT -> 180f
+                                CameraOrientation.PORTRAIT_UPSIDE_DOWN -> 90f
+                                else -> 0f
                             }
-
-                            if (currentOrientation == 180) {
-                                matrix.postRotate(180f)
-                            }
+//                            Previous mappings (deprecated):
+//                            CameraPosition.BACK -> when (currentOrientation) {
+//                                90 -> 90f
+//                                180 -> 180f
+//                                270 -> 270f
+//                                else -> 0f
+//                            }
+//                            CameraPosition.FRONT -> when (currentOrientation) {
+//                                90 -> 270f
+//                                180 -> 180f
+//                                270 -> 90f
+//                                else -> 0f
+//                            }
                         }
-
-                        if (position == CameraPosition.FRONT) {
-                            if (currentOrientation == 90) {
-                                matrix.postRotate(270f)
-                            }
-
-                            if (currentOrientation == 270) {
-                                matrix.postRotate(90f)
-                            }
-
-                            if (currentOrientation == 180) {
-                                matrix.postRotate(180f)
-                            }
-
-                            matrix.postScale(-1f, 1f);
-                        }
+                        if (degrees != 0f) matrix.postRotate(degrees)
+                        if (position == CameraPosition.FRONT)
+                            matrix.postScale(-1f, 1f)
 
                         var originalWidth = bm.width
                         var originalHeight = bm.height

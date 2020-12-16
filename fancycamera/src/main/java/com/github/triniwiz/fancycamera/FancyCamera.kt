@@ -126,6 +126,8 @@ class FancyCamera : FrameLayout {
     var cameraOrientation: CameraOrientation = CameraOrientation.UNKNOWN
         set(orientation) {
             field = orientation
+            cameraView.rotation = orientation
+            cameraView.currentOrientation = orientation.value
         }
 
     var maxAudioBitRate: Int = -1
