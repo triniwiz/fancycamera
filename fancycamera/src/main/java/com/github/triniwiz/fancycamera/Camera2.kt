@@ -1,21 +1,19 @@
 package com.github.triniwiz.fancycamera
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
-import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
 import android.os.Build
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
 import android.util.AttributeSet
+import android.util.DisplayMetrics
+import android.util.Log
+import android.view.OrientationEventListener
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -369,8 +367,8 @@ class Camera2 @JvmOverloads constructor(
             field = value
             if (!isRecording) {
                 if (imageAnalysis != null) {
-                    if (getDeviceRotation() != -1) {
-                        imageAnalysis?.targetRotation = getDeviceRotation()
+                    if (getTargetRotation() != -1) {
+                        imageAnalysis?.targetRotation = getTargetRotation()
                     }
                 } else {
                     setUpAnalysis()
@@ -434,6 +432,16 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
+    private fun getTargetRotation(): Int {
+        val display = resources.configuration.orientation
+        Log.d("Camera2", "getDeviceRotation currentOrientation=$currentOrientation, display=${display*90}")
+        val device = if (currentOrientation >= 0) currentOrientation / 90 else 0
+        return when (position) {
+            CameraPosition.BACK -> (4 + display - device) % 4
+            CameraPosition.FRONT -> (8 - display - device) % 4
+        }
+    }
+
     private fun safeUnbindAll() {
         try {
             cameraProvider?.unbindAll()
@@ -478,8 +486,8 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
-                    if (getDeviceRotation() != -1) {
-                        setTargetRotation(getDeviceRotation())
+                    if (getTargetRotation() != -1) {
+                        setTargetRotation(getTargetRotation())
                     }
                     setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
                 }
@@ -570,8 +578,8 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
             setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            if (getDeviceRotation() != -1) {
-                setTargetRotation(getDeviceRotation())
+            if (getTargetRotation() != -1) {
+                setTargetRotation(getTargetRotation())
             }
             setFlashMode(getFlashMode())
         }
@@ -636,8 +644,8 @@ class Camera2 @JvmOverloads constructor(
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
                     .apply {
-                        if (getDeviceRotation() != -1) {
-                            setTargetRotation(getDeviceRotation())
+                        if (getTargetRotation() != -1) {
+                            setTargetRotation(getTargetRotation())
                         }
                         setTargetResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
                         setMaxResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
@@ -694,6 +702,8 @@ class Camera2 @JvmOverloads constructor(
                                 else -> AspectRatio.RATIO_4_3
                             }
                     )
+                    if (getTargetRotation() != -1)
+                        setTargetRotation(getTargetRotation())
                 }
                 .build()
 
@@ -709,49 +719,31 @@ class Camera2 @JvmOverloads constructor(
         if (camera?.cameraInfo != null) {
             val streamMap = Camera2CameraInfo.from(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
 
-            for (size in streamMap?.getOutputSizes(ImageFormat.JPEG) ?: arrayOf()) {
-                val aspect = size.width.toFloat() / size.height.toFloat()
-                var key: String? = null
-                val value = Size(size.width, size.height)
-                when (aspect) {
-                    1.0F -> key = "1:1"
-                    in 1.2F..1.2222222F -> key = "6:5"
-                    in 1.3F..1.3333334F -> key = "4:3"
-                    in 1.77F..1.7777778F -> key = "16:9"
-                    1.5F -> key = "3:2"
-                }
+            if (streamMap != null) {
+                val sizes =
+                    streamMap.getOutputSizes(ImageFormat.JPEG) +
+                    streamMap.getOutputSizes(SurfaceTexture::class.java)
+                for (size in sizes) {
+                    val aspect = size.width.toFloat() / size.height.toFloat()
+                    var key: String? = null
+                    val value = Size(size.width, size.height)
+                    when (aspect) {
+                        1.0F -> key = "1:1"
+                        in 1.2F..1.2222222F -> key = "6:5"
+                        in 1.3F..1.3333334F -> key = "4:3"
+                        in 1.77F..1.7777778F -> key = "16:9"
+                        1.5F -> key = "3:2"
+                    }
 
-                if (key != null) {
-                    val list = cachedPictureRatioSizeMap.get(key)
-                    if (list == null) {
-                        cachedPictureRatioSizeMap.put(key, mutableListOf(value))
-                    } else {
-                        list.add(value)
+                    if (key != null) {
+                        val list = cachedPictureRatioSizeMap.get(key)
+                        if (list == null) {
+                            cachedPictureRatioSizeMap.put(key, mutableListOf(value))
+                        } else {
+                            list.add(value)
+                        }
                     }
                 }
-            }
-
-            for (size in streamMap?.getOutputSizes(SurfaceTexture::class.java) ?: arrayOf()) {
-                val aspect = size.width.toFloat() / size.height.toFloat()
-                var key: String? = null
-                val value = Size(size.width, size.height)
-                when (aspect) {
-                    1.0F -> key = "1:1"
-                    in 1.2F..1.2222222F -> key = "6:5"
-                    in 1.3F..1.3333334F -> key = "4:3"
-                    in 1.77F..1.7777778F -> key = "16:9"
-                    1.5F -> key = "3:2"
-                }
-
-                if (key != null) {
-                    val list = cachedPreviewRatioSizeMap.get(key)
-                    if (list == null) {
-                        cachedPreviewRatioSizeMap.put(key, mutableListOf(value))
-                    } else {
-                        list.add(value)
-                    }
-                }
-
             }
         }
 
@@ -984,10 +976,6 @@ class Camera2 @JvmOverloads constructor(
             file = File(context.getExternalFilesDir(null), fileName)
         }
 
-        val meta = ImageCapture.Metadata().apply {
-            isReversedHorizontal = position == CameraPosition.FRONT
-        }
-
         if (cameraProvider != null) {
             if (videoCapture != null && cameraProvider!!.isBound(videoCapture!!)) {
                 cameraProvider?.unbind(videoCapture)
@@ -997,218 +985,271 @@ class Camera2 @JvmOverloads constructor(
             }
         }
 
-        val processingNeeded = autoSquareCrop || position != CameraPosition.BACK || rotation != CameraOrientation.UNKNOWN
-        if (processingNeeded) {
+        val useImageProxy = true // autoSquareCrop
+        if (useImageProxy) {
             imageCapture?.takePicture(imageCaptureExecutor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
-                    var isError = false
-                    var outputStream: FileOutputStream? = null
-                    try {
-                        val buffer = image.planes.first().buffer
-                        val bytes = ByteArray(buffer.remaining())
-                        buffer.get(bytes)
-
-                        val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        val matrix = Matrix()
-                        // Registering image's original rotation
-                        matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
-
-                        // Registering additional rotation to match the phone's orientation
-                        val degrees = when (position) {
-                            CameraPosition.BACK -> when (rotation) {
-                                CameraOrientation.PORTRAIT -> 90f
-                                CameraOrientation.LANDSCAPE_RIGHT -> 180f
-                                CameraOrientation.PORTRAIT_UPSIDE_DOWN -> 270f
-                                else -> 0f
-                            }
-                            CameraPosition.FRONT -> when (rotation) {
-                                CameraOrientation.PORTRAIT -> 270f
-                                CameraOrientation.LANDSCAPE_RIGHT -> 180f
-                                CameraOrientation.PORTRAIT_UPSIDE_DOWN -> 90f
-                                else -> 0f
-                            }
-//                            Previous mappings (deprecated):
-//                            CameraPosition.BACK -> when (currentOrientation) {
-//                                90 -> 90f
-//                                180 -> 180f
-//                                270 -> 270f
-//                                else -> 0f
-//                            }
-//                            CameraPosition.FRONT -> when (currentOrientation) {
-//                                90 -> 270f
-//                                180 -> 180f
-//                                270 -> 90f
-//                                else -> 0f
-//                            }
-                        }
-                        if (degrees != 0f) matrix.postRotate(degrees)
-                        if (position == CameraPosition.FRONT)
-                            matrix.postScale(-1f, 1f)
-
-                        var originalWidth = bm.width
-                        var originalHeight = bm.height
-                        var offsetWidth = 0
-                        var offsetHeight = 0
-                        if (autoSquareCrop) {
-                            if (originalWidth < originalHeight) {
-                                offsetHeight = (originalHeight - originalWidth) / 2;
-                                originalHeight = originalWidth;
-                            } else {
-                                offsetWidth = (originalWidth - originalHeight) / 2;
-                                originalWidth = originalHeight;
-                            }
-                        }
-                        val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
-
-                        outputStream = FileOutputStream(file!!, false)
-                        rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
-
-
-                        val exif = ExifInterface(file!!.absolutePath)
-
-                        val now = System.currentTimeMillis()
-                        val datetime = convertToExifDateTime(now)
-
-                        exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
-                        exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
-
-                        try {
-                            val subsec = (now - convertFromExifDateTime(datetime).time).toString()
-                            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
-                            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
-                        } catch (e: ParseException) {
-                        }
-
-                        exif.rotate(image.imageInfo.rotationDegrees)
-                        if (meta.isReversedHorizontal) {
-                            exif.flipHorizontally()
-                        }
-                        if (meta.isReversedVertical) {
-                            exif.flipVertically()
-                        }
-                        if (meta.location != null) {
-                            exif.setGpsInfo(meta.location!!)
-                        }
-                        exif.saveAttributes()
-
-                        bm.recycle()
-                        rotated.recycle()
-                    } catch (e: Exception) {
-                        isError = true
-                        listener?.onCameraError("Failed to save photo.", e)
-                    } finally {
-                        try {
-                            outputStream?.close()
-                        } catch (e: IOException) {
-                            //NOOP
-                        }
-                        try {
-                            image.close()
-                        } catch (e: Exception) {
-
-                        }
-                        if (!isError) {
-                            if (saveToGallery && hasStoragePermission()) {
-                                val values = ContentValues().apply {
-                                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                                    put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
-                                    put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
-                                        put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                                    }
-                                }
-
-                                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                                if (uri == null) {
-                                    listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
-                                } else {
-                                    val fos = context.contentResolver.openOutputStream(uri)
-                                    val fis = FileInputStream(file!!)
-                                    fos.use {
-                                        if (it != null) {
-                                            fis.copyTo(it)
-                                            it.flush()
-                                            it.close()
-                                            fis.close()
-                                        }
-                                    }
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                        values.clear();
-                                        values.put(MediaStore.Images.Media.IS_PENDING, 0);
-                                        context.contentResolver.update(uri, values, null, null);
-                                    }
-                                    listener?.onCameraPhoto(file)
-                                }
-
-                            } else {
-                                listener?.onCameraPhoto(file)
-                            }
-
-                        }
-                    }
-
+                    processImageProxy(image, fileName)
                 }
-
-                fun onError(imageCaptureError: ImageCapture.ImageCaptureError, message: String, cause: Throwable?) {
-                    val e = if (cause != null) {
-                        Exception(cause)
-                    } else {
-                        Exception()
-                    }
-                    listener?.onCameraError(message, e)
-                }
-            })
-        } else {
-            val options = ImageCapture.OutputFileOptions.Builder(file!!)
-            options.setMetadata(meta)
-            imageCapture?.takePicture(options.build(), imageCaptureExecutor, object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    if (saveToGallery && hasStoragePermission()) {
-                        val values = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                            put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
-
-                            put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
-                                put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                            }
-                        }
-
-                        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                        if (uri == null) {
-                            listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
-                        } else {
-                            val fos = context.contentResolver.openOutputStream(uri)
-                            val fis = FileInputStream(file!!)
-                            fos.use {
-                                if (it != null) {
-                                    fis.copyTo(it)
-                                    it.flush()
-                                    it.close()
-                                    fis.close()
-                                }
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                values.clear()
-                                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                                context.contentResolver.update(uri, values, null, null)
-                            }
-                            listener?.onCameraPhoto(file)
-                        }
-
-                    } else {
-                        listener?.onCameraPhoto(file)
-                    }
-                }
-
                 override fun onError(exception: ImageCaptureException) {
                     listener?.onCameraError("Failed to take photo image", exception)
                 }
             })
+        } else {
+            val meta = ImageCapture.Metadata().apply {
+                isReversedHorizontal = position == CameraPosition.FRONT
+            }
+            val options = ImageCapture.OutputFileOptions.Builder(file!!)
+            options.setMetadata(meta)
+            imageCapture?.takePicture(options.build(), imageCaptureExecutor, object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    processImageFile(outputFileResults.savedUri.toString()) // same as outputFileResults.savedUri.toString() ?
+                }
+                override fun onError(exception: ImageCaptureException) {
+                    listener?.onCameraError("Failed to take photo image", exception)
+                }
+            })
+        }
+    }
+
+    private fun processImageProxy(image: ImageProxy, fileName: String) {
+        var isError = false
+        var outputStream: FileOutputStream? = null
+        try {
+            val meta = ImageCapture.Metadata().apply {
+                isReversedHorizontal = position == CameraPosition.FRONT
+            }
+
+            val buffer = image.planes.first().buffer
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+
+            val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val matrix = Matrix()
+
+            // Registering image's required rotation, provided by Androidx ImageAnalysis
+            val imageTargetRotation = image.imageInfo.rotationDegrees
+            val display = resources.configuration.orientation * 90
+            val sum = (imageTargetRotation + display) % 360
+            matrix.postRotate(sum.toFloat())
+            Log.d("Camera2", "takePhoto: imageTargetRotation=$imageTargetRotation, display=$display")
+
+            /*
+            // Registering additional rotation to match the phone's orientation
+            if (currentOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) {
+                var degrees: Float = when (position) {
+                    CameraPosition.BACK -> when (currentOrientation) {
+                        0 -> 0f
+                        90 -> 90f
+                        180 -> 180f
+                        270 -> 270f
+                        else -> -1f
+                    }
+                    CameraPosition.FRONT -> when (currentOrientation) {
+                        0 -> 0f
+                        90 -> 270f
+                        180 -> 180f
+                        270 -> 90f
+                        else -> -1f
+                    }
+                }
+                Log.d("Camera2", "takePhoto: currentOrientation=$currentOrientation, rotation=$rotation, degrees=$degrees")
+
+                if (degrees != -1f) matrix.postRotate(degrees)
+            }
+             */
+
+            // Flipping over the image in case it is the front camera
+            if (position == CameraPosition.FRONT)
+                matrix.postScale(-1f, 1f)
+
+            var originalWidth = bm.width
+            var originalHeight = bm.height
+            var offsetWidth = 0
+            var offsetHeight = 0
+            if (autoSquareCrop) {
+                if (originalWidth < originalHeight) {
+                    offsetHeight = (originalHeight - originalWidth) / 2;
+                    originalHeight = originalWidth;
+                } else {
+                    offsetWidth = (originalWidth - originalHeight) / 2;
+                    originalWidth = originalHeight;
+                }
+            }
+            Log.d("Camera2", "takePhoto: originalWidth=$originalWidth, originalHeight=$originalHeight")
+            val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
+
+            outputStream = FileOutputStream(file!!, false)
+            rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+
+            val exif = ExifInterface(file!!.absolutePath)
+
+            val now = System.currentTimeMillis()
+            val datetime = convertToExifDateTime(now)
+
+            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
+            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
+
+            try {
+                val subsec = (now - convertFromExifDateTime(datetime).time).toString()
+                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
+                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
+            } catch (e: ParseException) {
+            }
+
+            exif.rotate(image.imageInfo.rotationDegrees)
+            if (meta.isReversedHorizontal) {
+                exif.flipHorizontally()
+            }
+            if (meta.isReversedVertical) {
+                exif.flipVertically()
+            }
+            if (meta.location != null) {
+                exif.setGpsInfo(meta.location!!)
+            }
+            exif.saveAttributes()
+
+            bm.recycle()
+            rotated.recycle()
+        } catch (e: Exception) {
+            isError = true
+            listener?.onCameraError("Failed to save photo.", e)
+        } finally {
+            try {
+                outputStream?.close()
+            } catch (e: IOException) {
+                //NOOP
+            }
+            try {
+                image.close()
+            } catch (e: Exception) {
+
+            }
+            if (!isError) {
+                if (saveToGallery && hasStoragePermission()) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                            put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                        }
+                    }
+
+                    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    if (uri == null) {
+                        listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
+                    } else {
+                        val fos = context.contentResolver.openOutputStream(uri)
+                        val fis = FileInputStream(file!!)
+                        fos.use {
+                            if (it != null) {
+                                fis.copyTo(it)
+                                it.flush()
+                                it.close()
+                                fis.close()
+                            }
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                            values.clear();
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                            context.contentResolver.update(uri, values, null, null);
+                        }
+                        listener?.onCameraPhoto(file)
+                    }
+
+                } else {
+                    listener?.onCameraPhoto(file)
+                }
+
+            }
+        }
+    }
+
+    private fun processImageFile(fileName: String) {
+        // Registering "soft" rotation via Exif metadata
+        val exif = ExifInterface(file!!.absolutePath)
+        var rotationValue: Int = getTargetRotation()
+        /*
+        var rotationValue: Int = when (position) {
+            CameraPosition.BACK -> when (display) {
+                Configuration.ORIENTATION_LANDSCAPE -> ExifInterface.ORIENTATION_ROTATE_270
+                Configuration.ORIENTATION_PORTRAIT -> ExifInterface.ORIENTATION_ROTATE_180
+                else -> ExifInterface.ORIENTATION_UNDEFINED
+            }
+            CameraPosition.FRONT -> when (currentOrientation) {
+                Configuration.ORIENTATION_LANDSCAPE -> ExifInterface.ORIENTATION_ROTATE_90
+                Configuration.ORIENTATION_PORTRAIT -> ExifInterface.ORIENTATION_ROTATE_180
+                else -> ExifInterface.ORIENTATION_UNDEFINED
+            }
+        }
+         */
+        /*
+        var rotationValue: Int = when (position) {
+            CameraPosition.BACK -> when (currentOrientation) {
+                0 -> ExifInterface.ORIENTATION_ROTATE_90
+                90 -> ExifInterface.ORIENTATION_ROTATE_180
+                180 -> ExifInterface.ORIENTATION_ROTATE_270
+                270 -> ExifInterface.ORIENTATION_NORMAL
+                else -> ExifInterface.ORIENTATION_UNDEFINED
+            }
+            CameraPosition.FRONT -> when (currentOrientation) {
+                0 -> ExifInterface.ORIENTATION_ROTATE_270
+                90 -> ExifInterface.ORIENTATION_ROTATE_180
+                180 -> ExifInterface.ORIENTATION_ROTATE_90
+                270 -> ExifInterface.ORIENTATION_NORMAL
+                else -> ExifInterface.ORIENTATION_UNDEFINED
+            }
+        }
+        */
+        Log.d("Camera2", "takePhoto: currentOrientation=$currentOrientation, rotation=$rotation, rotationValue=$rotationValue")
+        try {
+            if (rotationValue != ExifInterface.ORIENTATION_UNDEFINED) {
+                exif.setAttribute(ExifInterface.TAG_ORIENTATION, rotationValue.toString())
+                exif.saveAttributes()
+            }
+        } catch (e: IOException) {}
+
+        // Saving image to user gallery
+        if (saveToGallery && hasStoragePermission()) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                }
+            }
+
+            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            if (uri == null) {
+                listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
+            } else {
+                val fos = context.contentResolver.openOutputStream(uri)
+                val fis = FileInputStream(file!!)
+                fos.use {
+                    if (it != null) {
+                        fis.copyTo(it)
+                        it.flush()
+                        it.close()
+                        fis.close()
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                    values.clear()
+                    values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, values, null, null)
+                }
+                listener?.onCameraPhoto(file)
+            }
+
+        } else {
+            listener?.onCameraPhoto(file)
         }
     }
 

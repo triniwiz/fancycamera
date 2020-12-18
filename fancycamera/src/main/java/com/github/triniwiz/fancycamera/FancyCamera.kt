@@ -123,11 +123,13 @@ class FancyCamera : FrameLayout {
             cameraView.position = value
         }
 
-    var cameraOrientation: CameraOrientation = CameraOrientation.UNKNOWN
+    // TODO(Find a purpose for this property, which is not being used, or remove it)
+    var cameraOrientation: CameraOrientation
+        get() {
+            return cameraView.rotation
+        }
         set(orientation) {
-            field = orientation
             cameraView.rotation = orientation
-            cameraView.currentOrientation = orientation.value
         }
 
     var maxAudioBitRate: Int = -1
