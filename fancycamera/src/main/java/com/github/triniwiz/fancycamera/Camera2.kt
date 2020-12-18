@@ -707,7 +707,7 @@ class Camera2 @JvmOverloads constructor(
         handleZoom()
 
         if (camera?.cameraInfo != null) {
-            val streamMap = Camera2CameraInfo.fromCameraInfo(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val streamMap = Camera2CameraInfo.from(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
 
             for (size in streamMap?.getOutputSizes(ImageFormat.JPEG) ?: arrayOf()) {
                 val aspect = size.width.toFloat() / size.height.toFloat()
