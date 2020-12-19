@@ -355,6 +355,7 @@ class Camera2 @JvmOverloads constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    override var allowExifRotation: Boolean = true
     override var autoSquareCrop: Boolean = false
     override var autoFocus: Boolean = false
     override var saveToGallery: Boolean = false
@@ -985,7 +986,7 @@ class Camera2 @JvmOverloads constructor(
             }
         }
 
-        val useImageProxy = true // autoSquareCrop
+        val useImageProxy = autoSquareCrop || (allowExifRotation == false)
         if (useImageProxy) {
             imageCapture?.takePicture(imageCaptureExecutor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {

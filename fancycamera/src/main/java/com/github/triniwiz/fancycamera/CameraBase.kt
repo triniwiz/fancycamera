@@ -30,6 +30,7 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract var position: CameraPosition
     abstract var rotation: CameraOrientation
     abstract var flashMode: CameraFlashMode
+    abstract var allowExifRotation: Boolean
     abstract var autoSquareCrop: Boolean
     abstract var autoFocus: Boolean
     abstract var saveToGallery: Boolean

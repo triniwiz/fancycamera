@@ -88,6 +88,14 @@ class FancyCamera : FrameLayout {
             cameraView.flashMode = value
         }
 
+    var allowExifRotation: Boolean
+        get() {
+            return cameraView.allowExifRotation
+        }
+        set(value) {
+            cameraView.allowExifRotation = value
+        }
+
     var autoSquareCrop: Boolean = false
         get() {
             return cameraView.autoSquareCrop
