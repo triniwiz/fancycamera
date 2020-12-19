@@ -11,31 +11,28 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
-import android.util.DisplayMetrics
 import android.util.Log
-import android.view.OrientationEventListener
 import android.view.Surface
+import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
 import androidx.camera.core.Camera
 import androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.util.Consumer
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.LifecycleOwner
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
+import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.lang.Exception
-import java.lang.reflect.Method
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
@@ -46,7 +43,8 @@ import kotlin.math.min
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 class Camera2 @JvmOverloads constructor(
         context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : CameraBase(context, attrs, defStyleAttr), Preview.SurfaceProvider {
+) : CameraBase(context, attrs, defStyleAttr) {
+    private var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: androidx.camera.core.ImageAnalysis? = null
@@ -112,7 +110,11 @@ class Camera2 @JvmOverloads constructor(
             if (field == "0x0") {
                 val size = cachedPictureRatioSizeMap[displayRatio]?.get(0)
                 if (size != null) {
-                    return "${size.width}x${size.height}"
+                    return when (getViewOrientation()) {
+                        Configuration.ORIENTATION_LANDSCAPE -> "${size.width}x${size.height}"
+                        Configuration.ORIENTATION_PORTRAIT -> "${size.height}x${size.width}"
+                        else -> field
+                    }
                 }
             }
             return field
@@ -320,7 +322,6 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-
     init {
         detectSupport()
         surfaceTextureListener = object : SurfaceTextureListener {
@@ -342,17 +343,26 @@ class Camera2 @JvmOverloads constructor(
                 onSurfaceUpdateListener?.onUpdate()
             }
         }
-        val processCameraProvider = ProcessCameraProvider.getInstance(context)
-        processCameraProvider.addListener({
-            cameraProvider = processCameraProvider.get()
+
+        // TODO: Bind this to the view's onCreate method
+        cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        cameraProviderFuture.addListener({
             try {
                 cameraProvider?.unbindAll()
-                refreshCamera()
+                cameraProvider = cameraProviderFuture.get()
+                refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
                 listener?.onCameraError("Failed to get camera", e)
                 isStarted = false
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private val surfaceProvider = object: Preview.SurfaceProvider {
+        override fun onSurfaceRequested(request: SurfaceRequest) {
+            surfaceRequest = request
+            initSurface()
+        }
     }
 
     override var allowExifRotation: Boolean = true
@@ -421,6 +431,8 @@ class Camera2 @JvmOverloads constructor(
                 .build()
     }
 
+    /** Rotation specified by client (external code)
+     * TODO: link this to the code, overriding or affecting targetRotation logic */
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
     private fun getDeviceRotation(): Int {
@@ -433,14 +445,52 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    private fun getTargetRotation(): Int {
-        val display = resources.configuration.orientation
-        Log.d("Camera2", "getDeviceRotation currentOrientation=$currentOrientation, display=${display*90}")
-        val device = if (currentOrientation >= 0) currentOrientation / 90 else 0
-        return when (position) {
-            CameraPosition.BACK -> (4 + display - device) % 4
-            CameraPosition.FRONT -> (8 - display - device) % 4
+    /** Values 0=undefined, 1=portait, 2=landscape */
+    private fun getViewOrientation(): Int {
+        // https://stackoverflow.com/questions/2795833/check-orientation-on-android-phone
+        return if (context is AppCompatActivity)
+            context.resources.configuration.orientation
+        else
+            resources.configuration.orientation
+    }
+
+    /** Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
+    private fun getViewRotation(): Int {
+        // Note: API R ( 30 ) has context.display
+        if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val display = context.display
+            if (display != null)
+                return display.rotation
+        } else {
+            val windowService = (context as? AppCompatActivity)?.let { it.windowManager }
+                ?: context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            @Suppress("DEPRECATION")
+            return windowService.getDefaultDisplay().getRotation()
         }
+        return 0
+    }
+
+    /**
+     * Calculates the targetRotation provided to CameraX components
+     * Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
+    @SuppressLint("ServiceCast")
+    private fun getTargetRotation(): Int {
+        val viewOrientation = getViewOrientation()
+        val viewRotation = getViewRotation()
+
+        // Device orientation
+        val ori = if (currentOrientation >= 0) currentOrientation / 90 else 0
+
+        // Camera direction
+        val cam = when (position) { CameraPosition.BACK -> 1; CameraPosition.FRONT -> -1 else -> 0}
+
+        // Main equation
+        val target = (4 + viewRotation * cam) % 4
+        // TODO: Allow switching between different equations (depends on how the App is designed)
+
+        Log.d("Camera2", "getDeviceRotation variables: o$ori, c$cam, vo$viewOrientation, vr$viewRotation, t$target")
+
+        return target
     }
 
     private fun safeUnbindAll() {
@@ -451,7 +501,6 @@ class Camera2 @JvmOverloads constructor(
             isStarted = false
         }
     }
-
 
     override var quality: Quality = Quality.MAX_480P
         set(value) {
@@ -638,6 +687,28 @@ class Camera2 @JvmOverloads constructor(
             }
         }
     }
+    
+    private fun initPreview() {
+        preview = Preview.Builder()
+                .apply {
+                    setTargetAspectRatio(
+                            when (displayRatio) {
+                                "16:9" -> AspectRatio.RATIO_16_9
+                                else -> AspectRatio.RATIO_4_3
+                            }
+                    )
+                    if (getTargetRotation() != -1)
+                        setTargetRotation(getTargetRotation())
+                }
+                .build()
+
+        preview?.setSurfaceProvider(this.surfaceProvider)
+        camera = if (detectorType != DetectorType.None && isMLSupported) {
+            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
+        } else {
+            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview)
+        }
+    }
 
     @SuppressLint("RestrictedApi")
     private fun initVideoCapture() {
@@ -693,27 +764,9 @@ class Camera2 @JvmOverloads constructor(
             setUpAnalysis()
         }
 
+        initPreview()
+
         initVideoCapture()
-
-        preview = Preview.Builder()
-                .apply {
-                    setTargetAspectRatio(
-                            when (displayRatio) {
-                                "16:9" -> AspectRatio.RATIO_16_9
-                                else -> AspectRatio.RATIO_4_3
-                            }
-                    )
-                    if (getTargetRotation() != -1)
-                        setTargetRotation(getTargetRotation())
-                }
-                .build()
-
-        preview?.setSurfaceProvider(this)
-        camera = if (detectorType != DetectorType.None && isMLSupported) {
-            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
-        } else {
-            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview)
-        }
 
         handleZoom()
 
@@ -749,16 +802,8 @@ class Camera2 @JvmOverloads constructor(
         }
 
         updateImageCapture()
-    }
 
-    override fun onSurfaceRequested(request: SurfaceRequest) {
-        surfaceRequest = request
-        initSurface()
-    }
-
-    private fun setupCameraAndSurface() {
-        refreshCamera()
-        initSurface()
+        isStarted = true
     }
 
     private fun initSurface() {
@@ -977,13 +1022,21 @@ class Camera2 @JvmOverloads constructor(
             file = File(context.getExternalFilesDir(null), fileName)
         }
 
-        if (cameraProvider != null) {
-            if (videoCapture != null && cameraProvider!!.isBound(videoCapture!!)) {
-                cameraProvider?.unbind(videoCapture)
+        cameraProvider?.let { provider ->
+            videoCapture?.let { if (provider.isBound(it)) provider.unbind(it) }
+
+            if (imageCapture == null) updateImageCapture()
+            imageCapture?.let { capture ->
+                if (!provider.isBound(capture)) {
+                    provider.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), capture)
+                }
+            } ?: run {
+                listener?.onCameraError("Cannot take photo", Exception("imageCapture not set"))
+                return
             }
-            if (!cameraProvider!!.isBound(imageCapture!!)) {
-                cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), imageCapture!!)
-            }
+        } ?: run {
+            listener?.onCameraError("Cannot take photo", Exception("cameraProvider not set"))
+            return
         }
 
         val useImageProxy = autoSquareCrop || (allowExifRotation == false)
@@ -992,6 +1045,7 @@ class Camera2 @JvmOverloads constructor(
                 override fun onCaptureSuccess(image: ImageProxy) {
                     processImageProxy(image, fileName)
                 }
+
                 override fun onError(exception: ImageCaptureException) {
                     listener?.onCameraError("Failed to take photo image", exception)
                 }
@@ -1004,8 +1058,9 @@ class Camera2 @JvmOverloads constructor(
             options.setMetadata(meta)
             imageCapture?.takePicture(options.build(), imageCaptureExecutor, object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    processImageFile(outputFileResults.savedUri.toString()) // same as outputFileResults.savedUri.toString() ?
+                    processImageFile(fileName) // outputFileResults.savedUri.toString() is null
                 }
+
                 override fun onError(exception: ImageCaptureException) {
                     listener?.onCameraError("Failed to take photo image", exception)
                 }
@@ -1029,36 +1084,9 @@ class Camera2 @JvmOverloads constructor(
             val matrix = Matrix()
 
             // Registering image's required rotation, provided by Androidx ImageAnalysis
-            val imageTargetRotation = image.imageInfo.rotationDegrees
-            val display = resources.configuration.orientation * 90
-            val sum = (imageTargetRotation + display) % 360
-            matrix.postRotate(sum.toFloat())
-            Log.d("Camera2", "takePhoto: imageTargetRotation=$imageTargetRotation, display=$display")
-
-            /*
-            // Registering additional rotation to match the phone's orientation
-            if (currentOrientation != OrientationEventListener.ORIENTATION_UNKNOWN) {
-                var degrees: Float = when (position) {
-                    CameraPosition.BACK -> when (currentOrientation) {
-                        0 -> 0f
-                        90 -> 90f
-                        180 -> 180f
-                        270 -> 270f
-                        else -> -1f
-                    }
-                    CameraPosition.FRONT -> when (currentOrientation) {
-                        0 -> 0f
-                        90 -> 270f
-                        180 -> 180f
-                        270 -> 90f
-                        else -> -1f
-                    }
-                }
-                Log.d("Camera2", "takePhoto: currentOrientation=$currentOrientation, rotation=$rotation, degrees=$degrees")
-
-                if (degrees != -1f) matrix.postRotate(degrees)
-            }
-             */
+            var imageTargetRotation = image.imageInfo.rotationDegrees
+            matrix.postRotate(imageTargetRotation.toFloat())
+            Log.d("Camera2", "takePhoto: imageTargetRotation=$imageTargetRotation")
 
             // Flipping over the image in case it is the front camera
             if (position == CameraPosition.FRONT)
@@ -1170,49 +1198,6 @@ class Camera2 @JvmOverloads constructor(
     }
 
     private fun processImageFile(fileName: String) {
-        // Registering "soft" rotation via Exif metadata
-        val exif = ExifInterface(file!!.absolutePath)
-        var rotationValue: Int = getTargetRotation()
-        /*
-        var rotationValue: Int = when (position) {
-            CameraPosition.BACK -> when (display) {
-                Configuration.ORIENTATION_LANDSCAPE -> ExifInterface.ORIENTATION_ROTATE_270
-                Configuration.ORIENTATION_PORTRAIT -> ExifInterface.ORIENTATION_ROTATE_180
-                else -> ExifInterface.ORIENTATION_UNDEFINED
-            }
-            CameraPosition.FRONT -> when (currentOrientation) {
-                Configuration.ORIENTATION_LANDSCAPE -> ExifInterface.ORIENTATION_ROTATE_90
-                Configuration.ORIENTATION_PORTRAIT -> ExifInterface.ORIENTATION_ROTATE_180
-                else -> ExifInterface.ORIENTATION_UNDEFINED
-            }
-        }
-         */
-        /*
-        var rotationValue: Int = when (position) {
-            CameraPosition.BACK -> when (currentOrientation) {
-                0 -> ExifInterface.ORIENTATION_ROTATE_90
-                90 -> ExifInterface.ORIENTATION_ROTATE_180
-                180 -> ExifInterface.ORIENTATION_ROTATE_270
-                270 -> ExifInterface.ORIENTATION_NORMAL
-                else -> ExifInterface.ORIENTATION_UNDEFINED
-            }
-            CameraPosition.FRONT -> when (currentOrientation) {
-                0 -> ExifInterface.ORIENTATION_ROTATE_270
-                90 -> ExifInterface.ORIENTATION_ROTATE_180
-                180 -> ExifInterface.ORIENTATION_ROTATE_90
-                270 -> ExifInterface.ORIENTATION_NORMAL
-                else -> ExifInterface.ORIENTATION_UNDEFINED
-            }
-        }
-        */
-        Log.d("Camera2", "takePhoto: currentOrientation=$currentOrientation, rotation=$rotation, rotationValue=$rotationValue")
-        try {
-            if (rotationValue != ExifInterface.ORIENTATION_UNDEFINED) {
-                exif.setAttribute(ExifInterface.TAG_ORIENTATION, rotationValue.toString())
-                exif.saveAttributes()
-            }
-        } catch (e: IOException) {}
-
         // Saving image to user gallery
         if (saveToGallery && hasStoragePermission()) {
             val values = ContentValues().apply {
