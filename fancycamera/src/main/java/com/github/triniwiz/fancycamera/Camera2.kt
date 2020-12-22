@@ -110,7 +110,7 @@ class Camera2 @JvmOverloads constructor(
             if (field == "0x0") {
                 val size = cachedPictureRatioSizeMap[displayRatio]?.get(0)
                 if (size != null) {
-                    return when (getViewOrientation()) {
+                    return when (resources.configuration.orientation) {
                         Configuration.ORIENTATION_LANDSCAPE -> "${size.width}x${size.height}"
                         Configuration.ORIENTATION_PORTRAIT -> "${size.height}x${size.width}"
                         else -> field
@@ -322,6 +322,23 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
+    private var lastOrientation = -1
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig != null) {
+            if (lastOrientation != newConfig.orientation) {
+                lastOrientation = newConfig.orientation
+                val rotation = display.rotation
+                Log.d("Camera2", "onConfigurationChanged orientation:${newConfig.orientation} rotation:$rotation")
+                val targetRotation = getTargetRotation()
+                imageCapture?.targetRotation = targetRotation
+
+                @SuppressLint("UnsafeExperimentalUsageError")
+                preview?.targetRotation = (4 - rotation) % 4
+            }
+        }
+    }
+
     init {
         detectSupport()
         surfaceTextureListener = object : SurfaceTextureListener {
@@ -473,10 +490,9 @@ class Camera2 @JvmOverloads constructor(
     /**
      * Calculates the targetRotation provided to CameraX components
      * Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
-    @SuppressLint("ServiceCast")
     private fun getTargetRotation(): Int {
-        val viewOrientation = getViewOrientation()
-        val viewRotation = getViewRotation()
+        val viewOrientation = resources.configuration.orientation
+        val viewRotation = this.display.rotation
 
         // Device orientation
         val ori = if (currentOrientation >= 0) currentOrientation / 90 else 0
@@ -697,12 +713,15 @@ class Camera2 @JvmOverloads constructor(
                                 else -> AspectRatio.RATIO_4_3
                             }
                     )
-                    if (getTargetRotation() != -1)
-                        setTargetRotation(getTargetRotation())
+                    val rotation = display.rotation
+                    if (rotation != -1)
+                        setTargetRotation((4 - rotation) % 4)
                 }
                 .build()
+                .also {
+                    it.setSurfaceProvider(this.surfaceProvider)
+                }
 
-        preview?.setSurfaceProvider(this.surfaceProvider)
         camera = if (detectorType != DetectorType.None && isMLSupported) {
             cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
         } else {
