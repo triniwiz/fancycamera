@@ -88,6 +88,14 @@ class FancyCamera : FrameLayout {
             cameraView.flashMode = value
         }
 
+    var allowExifRotation: Boolean
+        get() {
+            return cameraView.allowExifRotation
+        }
+        set(value) {
+            cameraView.allowExifRotation = value
+        }
+
     var autoSquareCrop: Boolean = false
         get() {
             return cameraView.autoSquareCrop
@@ -123,9 +131,13 @@ class FancyCamera : FrameLayout {
             cameraView.position = value
         }
 
-    var cameraOrientation: CameraOrientation = CameraOrientation.UNKNOWN
+    // TODO(Find a purpose for this property, which is not being used, or remove it)
+    var cameraOrientation: CameraOrientation
+        get() {
+            return cameraView.rotation
+        }
         set(orientation) {
-            field = orientation
+            cameraView.rotation = orientation
         }
 
     var maxAudioBitRate: Int = -1

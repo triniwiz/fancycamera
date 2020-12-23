@@ -287,6 +287,8 @@ class Camera @JvmOverloads constructor(
 
     override var detectorType: DetectorType = DetectorType.None
 
+    override var allowExifRotation: Boolean = true // TODO( Implement )
+
     override var autoSquareCrop: Boolean = false
 
     override var autoFocus: Boolean = false

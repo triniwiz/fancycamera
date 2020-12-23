@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
+import android.util.Log
 import android.view.OrientationEventListener
 import android.view.TextureView
 import androidx.core.app.ActivityCompat
@@ -29,6 +30,7 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract var position: CameraPosition
     abstract var rotation: CameraOrientation
     abstract var flashMode: CameraFlashMode
+    abstract var allowExifRotation: Boolean
     abstract var autoSquareCrop: Boolean
     abstract var autoFocus: Boolean
     abstract var saveToGallery: Boolean
@@ -214,7 +216,8 @@ abstract class CameraBase @JvmOverloads constructor(
 
     }
 
-    internal var currentOrientation: Int = Configuration.ORIENTATION_UNDEFINED
+    /** Device orientation in degrees 0-359 */
+    internal var currentOrientation: Int = OrientationEventListener.ORIENTATION_UNKNOWN
 
     internal val VIDEO_RECORDER_PERMISSIONS_REQUEST = 868
     internal val VIDEO_RECORDER_PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
@@ -234,18 +237,25 @@ abstract class CameraBase @JvmOverloads constructor(
 
     internal var listener: CameraEventListener? = null
 
-    init {
-        val orientationEventListener = object : OrientationEventListener(context) {
-            override fun onOrientationChanged(orientation: Int) {
-                currentOrientation = when (orientation) {
-                    in 0..20, in 340..359 -> 0
-                    in 70..110 -> 90
-                    in 250..290 -> 270
-                    in 160..200 -> 180
-                    else -> currentOrientation
-                }
+    private val orientationEventListener = object : OrientationEventListener(context) {
+        override fun onOrientationChanged(orientation: Int) {
+            // Based on: https://developer.android.com/reference/androidx/camera/core/ImageAnalysis#setTargetRotation(int)
+            val newOrientation = when (orientation) {
+                in 0..20, in 340..359 -> 0
+                in 70..110 -> 90
+                in 250..290 -> 270
+                in 160..200 -> 180
+                else -> currentOrientation
             }
-        }.enable()
+            if (newOrientation != currentOrientation) {
+                Log.d("CameraBase", "Event: onOrientationChanged($orientation) -> currentOrientation = $currentOrientation to $newOrientation");
+                currentOrientation = newOrientation
+            }
+        }
+    }
+
+    init {
+        orientationEventListener.enable()
     }
 
 

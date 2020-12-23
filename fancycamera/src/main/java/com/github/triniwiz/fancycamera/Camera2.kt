@@ -1,42 +1,38 @@
 package com.github.triniwiz.fancycamera
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
-import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
 import android.media.Image
 import android.os.Build
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
 import android.util.AttributeSet
+import android.util.Log
 import android.view.Surface
+import android.view.WindowManager
 import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
 import androidx.camera.core.Camera
 import androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.util.Consumer
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.LifecycleOwner
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
+import com.google.common.util.concurrent.ListenableFuture
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.lang.Exception
-import java.lang.reflect.Method
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
@@ -47,7 +43,8 @@ import kotlin.math.min
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 class Camera2 @JvmOverloads constructor(
         context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : CameraBase(context, attrs, defStyleAttr), Preview.SurfaceProvider {
+) : CameraBase(context, attrs, defStyleAttr) {
+    private var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: androidx.camera.core.ImageAnalysis? = null
@@ -113,7 +110,11 @@ class Camera2 @JvmOverloads constructor(
             if (field == "0x0") {
                 val size = cachedPictureRatioSizeMap[displayRatio]?.get(0)
                 if (size != null) {
-                    return "${size.width}x${size.height}"
+                    return when (resources.configuration.orientation) {
+                        Configuration.ORIENTATION_LANDSCAPE -> "${size.width}x${size.height}"
+                        Configuration.ORIENTATION_PORTRAIT -> "${size.height}x${size.width}"
+                        else -> field
+                    }
                 }
             }
             return field
@@ -321,6 +322,22 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
+    private var lastOrientation = -1
+    override fun onConfigurationChanged(newConfig: Configuration?) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig != null) {
+            if (lastOrientation != newConfig.orientation) {
+                lastOrientation = newConfig.orientation
+                val rotation = display.rotation
+                Log.d("Camera2", "onConfigurationChanged orientation:${newConfig.orientation} rotation:$rotation")
+                val targetRotation = getTargetRotation()
+                imageCapture?.targetRotation = targetRotation
+
+                @SuppressLint("UnsafeExperimentalUsageError")
+                preview?.targetRotation = (4 - rotation) % 4
+            }
+        }
+    }
 
     init {
         detectSupport()
@@ -343,12 +360,14 @@ class Camera2 @JvmOverloads constructor(
                 onSurfaceUpdateListener?.onUpdate()
             }
         }
-        val processCameraProvider = ProcessCameraProvider.getInstance(context)
-        processCameraProvider.addListener({
-            cameraProvider = processCameraProvider.get()
+
+        // TODO: Bind this to the view's onCreate method
+        cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        cameraProviderFuture.addListener({
             try {
                 cameraProvider?.unbindAll()
-                refreshCamera()
+                cameraProvider = cameraProviderFuture.get()
+                refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
                 listener?.onCameraError("Failed to get camera", e)
                 isStarted = false
@@ -356,6 +375,14 @@ class Camera2 @JvmOverloads constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    private val surfaceProvider = object: Preview.SurfaceProvider {
+        override fun onSurfaceRequested(request: SurfaceRequest) {
+            surfaceRequest = request
+            initSurface()
+        }
+    }
+
+    override var allowExifRotation: Boolean = true
     override var autoSquareCrop: Boolean = false
     override var autoFocus: Boolean = false
     override var saveToGallery: Boolean = false
@@ -368,8 +395,8 @@ class Camera2 @JvmOverloads constructor(
             field = value
             if (!isRecording) {
                 if (imageAnalysis != null) {
-                    if (getDeviceRotation() != -1) {
-                        imageAnalysis?.targetRotation = getDeviceRotation()
+                    if (getTargetRotation() != -1) {
+                        imageAnalysis?.targetRotation = getTargetRotation()
                     }
                 } else {
                     setUpAnalysis()
@@ -421,6 +448,8 @@ class Camera2 @JvmOverloads constructor(
                 .build()
     }
 
+    /** Rotation specified by client (external code)
+     * TODO: link this to the code, overriding or affecting targetRotation logic */
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
     private fun getDeviceRotation(): Int {
@@ -433,6 +462,53 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
+    /** Values 0=undefined, 1=portait, 2=landscape */
+    private fun getViewOrientation(): Int {
+        // https://stackoverflow.com/questions/2795833/check-orientation-on-android-phone
+        return if (context is AppCompatActivity)
+            context.resources.configuration.orientation
+        else
+            resources.configuration.orientation
+    }
+
+    /** Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
+    private fun getViewRotation(): Int {
+        // Note: API R ( 30 ) has context.display
+        if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val display = context.display
+            if (display != null)
+                return display.rotation
+        } else {
+            val windowService = (context as? AppCompatActivity)?.let { it.windowManager }
+                ?: context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            @Suppress("DEPRECATION")
+            return windowService.getDefaultDisplay().getRotation()
+        }
+        return 0
+    }
+
+    /**
+     * Calculates the targetRotation provided to CameraX components
+     * Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
+    private fun getTargetRotation(): Int {
+        val viewOrientation = resources.configuration.orientation
+        val viewRotation = this.display.rotation
+
+        // Device orientation
+        val ori = if (currentOrientation >= 0) currentOrientation / 90 else 0
+
+        // Camera direction
+        val cam = when (position) { CameraPosition.BACK -> 1; CameraPosition.FRONT -> -1 else -> 0}
+
+        // Main equation
+        val target = (4 + viewRotation * cam) % 4
+        // TODO: Allow switching between different equations (depends on how the App is designed)
+
+        Log.d("Camera2", "getDeviceRotation variables: o$ori, c$cam, vo$viewOrientation, vr$viewRotation, t$target")
+
+        return target
+    }
+
     private fun safeUnbindAll() {
         try {
             cameraProvider?.unbindAll()
@@ -441,7 +517,6 @@ class Camera2 @JvmOverloads constructor(
             isStarted = false
         }
     }
-
 
     override var quality: Quality = Quality.MAX_480P
         set(value) {
@@ -477,8 +552,8 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
-                    if (getDeviceRotation() != -1) {
-                        setTargetRotation(getDeviceRotation())
+                    if (getTargetRotation() != -1) {
+                        setTargetRotation(getTargetRotation())
                     }
                     setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
                 }
@@ -569,8 +644,8 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
             setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            if (getDeviceRotation() != -1) {
-                setTargetRotation(getDeviceRotation())
+            if (getTargetRotation() != -1) {
+                setTargetRotation(getTargetRotation())
             }
             setFlashMode(getFlashMode())
         }
@@ -628,6 +703,31 @@ class Camera2 @JvmOverloads constructor(
             }
         }
     }
+    
+    private fun initPreview() {
+        preview = Preview.Builder()
+                .apply {
+                    setTargetAspectRatio(
+                            when (displayRatio) {
+                                "16:9" -> AspectRatio.RATIO_16_9
+                                else -> AspectRatio.RATIO_4_3
+                            }
+                    )
+                    val rotation = display.rotation
+                    if (rotation != -1)
+                        setTargetRotation((4 - rotation) % 4)
+                }
+                .build()
+                .also {
+                    it.setSurfaceProvider(this.surfaceProvider)
+                }
+
+        camera = if (detectorType != DetectorType.None && isMLSupported) {
+            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
+        } else {
+            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview)
+        }
+    }
 
     @SuppressLint("RestrictedApi")
     private fun initVideoCapture() {
@@ -635,8 +735,8 @@ class Camera2 @JvmOverloads constructor(
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
                     .apply {
-                        if (getDeviceRotation() != -1) {
-                            setTargetRotation(getDeviceRotation())
+                        if (getTargetRotation() != -1) {
+                            setTargetRotation(getTargetRotation())
                         }
                         setTargetResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
                         setMaxResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
@@ -683,88 +783,46 @@ class Camera2 @JvmOverloads constructor(
             setUpAnalysis()
         }
 
+        initPreview()
+
         initVideoCapture()
-
-        preview = Preview.Builder()
-                .apply {
-                    setTargetAspectRatio(
-                            when (displayRatio) {
-                                "16:9" -> AspectRatio.RATIO_16_9
-                                else -> AspectRatio.RATIO_4_3
-                            }
-                    )
-                }
-                .build()
-
-        preview?.setSurfaceProvider(this)
-        camera = if (detectorType != DetectorType.None && isMLSupported) {
-            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
-        } else {
-            cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview)
-        }
 
         handleZoom()
 
         if (camera?.cameraInfo != null) {
-            val streamMap = Camera2CameraInfo.fromCameraInfo(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            val streamMap = Camera2CameraInfo.from(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
 
-            for (size in streamMap?.getOutputSizes(ImageFormat.JPEG) ?: arrayOf()) {
-                val aspect = size.width.toFloat() / size.height.toFloat()
-                var key: String? = null
-                val value = Size(size.width, size.height)
-                when (aspect) {
-                    1.0F -> key = "1:1"
-                    in 1.2F..1.2222222F -> key = "6:5"
-                    in 1.3F..1.3333334F -> key = "4:3"
-                    in 1.77F..1.7777778F -> key = "16:9"
-                    1.5F -> key = "3:2"
-                }
+            if (streamMap != null) {
+                val sizes =
+                    streamMap.getOutputSizes(ImageFormat.JPEG) +
+                    streamMap.getOutputSizes(SurfaceTexture::class.java)
+                for (size in sizes) {
+                    val aspect = size.width.toFloat() / size.height.toFloat()
+                    var key: String? = null
+                    val value = Size(size.width, size.height)
+                    when (aspect) {
+                        1.0F -> key = "1:1"
+                        in 1.2F..1.2222222F -> key = "6:5"
+                        in 1.3F..1.3333334F -> key = "4:3"
+                        in 1.77F..1.7777778F -> key = "16:9"
+                        1.5F -> key = "3:2"
+                    }
 
-                if (key != null) {
-                    val list = cachedPictureRatioSizeMap.get(key)
-                    if (list == null) {
-                        cachedPictureRatioSizeMap.put(key, mutableListOf(value))
-                    } else {
-                        list.add(value)
+                    if (key != null) {
+                        val list = cachedPictureRatioSizeMap.get(key)
+                        if (list == null) {
+                            cachedPictureRatioSizeMap.put(key, mutableListOf(value))
+                        } else {
+                            list.add(value)
+                        }
                     }
                 }
-            }
-
-            for (size in streamMap?.getOutputSizes(SurfaceTexture::class.java) ?: arrayOf()) {
-                val aspect = size.width.toFloat() / size.height.toFloat()
-                var key: String? = null
-                val value = Size(size.width, size.height)
-                when (aspect) {
-                    1.0F -> key = "1:1"
-                    in 1.2F..1.2222222F -> key = "6:5"
-                    in 1.3F..1.3333334F -> key = "4:3"
-                    in 1.77F..1.7777778F -> key = "16:9"
-                    1.5F -> key = "3:2"
-                }
-
-                if (key != null) {
-                    val list = cachedPreviewRatioSizeMap.get(key)
-                    if (list == null) {
-                        cachedPreviewRatioSizeMap.put(key, mutableListOf(value))
-                    } else {
-                        list.add(value)
-                    }
-                }
-
             }
         }
 
         updateImageCapture()
-    }
 
-    override fun onSurfaceRequested(request: SurfaceRequest) {
-        surfaceRequest = request
-        initSurface()
-    }
-
-    private fun setupCameraAndSurface() {
-        refreshCamera()
-        initSurface()
+        isStarted = true
     }
 
     private fun initSurface() {
@@ -983,226 +1041,220 @@ class Camera2 @JvmOverloads constructor(
             file = File(context.getExternalFilesDir(null), fileName)
         }
 
-        val meta = ImageCapture.Metadata().apply {
-            isReversedHorizontal = position == CameraPosition.FRONT
+        cameraProvider?.let { provider ->
+            videoCapture?.let { if (provider.isBound(it)) provider.unbind(it) }
+
+            if (imageCapture == null) updateImageCapture()
+            imageCapture?.let { capture ->
+                if (!provider.isBound(capture)) {
+                    provider.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), capture)
+                }
+            } ?: run {
+                listener?.onCameraError("Cannot take photo", Exception("imageCapture not set"))
+                return
+            }
+        } ?: run {
+            listener?.onCameraError("Cannot take photo", Exception("cameraProvider not set"))
+            return
         }
 
-        if (cameraProvider != null) {
-            if (videoCapture != null && cameraProvider!!.isBound(videoCapture!!)) {
-                cameraProvider?.unbind(videoCapture)
-            }
-            if (!cameraProvider!!.isBound(imageCapture!!)) {
-                cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), imageCapture!!)
-            }
-        }
-        if (autoSquareCrop) {
+        val useImageProxy = autoSquareCrop || (allowExifRotation == false)
+        if (useImageProxy) {
             imageCapture?.takePicture(imageCaptureExecutor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
-                    var isError = false
-                    var outputStream: FileOutputStream? = null
-                    try {
-                        val buffer = image.planes.first().buffer
-                        val bytes = ByteArray(buffer.remaining())
-                        buffer.get(bytes)
-
-                        val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        val matrix = Matrix()
-                        matrix.postRotate(image.imageInfo.rotationDegrees.toFloat())
-
-                        if (position == CameraPosition.BACK) {
-                            if (currentOrientation == 90) {
-                                matrix.postRotate(90f)
-                            }
-
-                            if (currentOrientation == 270) {
-                                matrix.postRotate(270f)
-                            }
-
-                            if (currentOrientation == 180) {
-                                matrix.postRotate(180f)
-                            }
-                        }
-
-                        if (position == CameraPosition.FRONT) {
-                            if (currentOrientation == 90) {
-                                matrix.postRotate(270f)
-                            }
-
-                            if (currentOrientation == 270) {
-                                matrix.postRotate(90f)
-                            }
-
-                            if (currentOrientation == 180) {
-                                matrix.postRotate(180f)
-                            }
-
-                            matrix.postScale(-1f, 1f);
-                        }
-
-                        var originalWidth = bm.width
-                        var originalHeight = bm.height
-                        var offsetWidth = 0
-                        var offsetHeight = 0
-                        if (autoSquareCrop) {
-                            if (originalWidth < originalHeight) {
-                                offsetHeight = (originalHeight - originalWidth) / 2;
-                                originalHeight = originalWidth;
-                            } else {
-                                offsetWidth = (originalWidth - originalHeight) / 2;
-                                originalWidth = originalHeight;
-                            }
-                        }
-                        val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
-
-                        outputStream = FileOutputStream(file!!, false)
-                        rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
-
-
-                        val exif = ExifInterface(file!!.absolutePath)
-
-                        val now = System.currentTimeMillis()
-                        val datetime = convertToExifDateTime(now)
-
-                        exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
-                        exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
-
-                        try {
-                            val subsec = (now - convertFromExifDateTime(datetime).time).toString()
-                            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
-                            exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
-                        } catch (e: ParseException) {
-                        }
-
-                        exif.rotate(image.imageInfo.rotationDegrees)
-                        if (meta.isReversedHorizontal) {
-                            exif.flipHorizontally()
-                        }
-                        if (meta.isReversedVertical) {
-                            exif.flipVertically()
-                        }
-                        if (meta.location != null) {
-                            exif.setGpsInfo(meta.location!!)
-                        }
-                        exif.saveAttributes()
-
-                        bm.recycle()
-                        rotated.recycle()
-                    } catch (e: Exception) {
-                        isError = true
-                        listener?.onCameraError("Failed to save photo.", e)
-                    } finally {
-                        try {
-                            outputStream?.close()
-                        } catch (e: IOException) {
-                            //NOOP
-                        }
-                        try {
-                            image.close()
-                        } catch (e: Exception) {
-
-                        }
-                        if (!isError) {
-                            if (saveToGallery && hasStoragePermission()) {
-                                val values = ContentValues().apply {
-                                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                                    put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
-                                    put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
-                                        put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                                    }
-                                }
-
-                                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                                if (uri == null) {
-                                    listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
-                                } else {
-                                    val fos = context.contentResolver.openOutputStream(uri)
-                                    val fis = FileInputStream(file!!)
-                                    fos.use {
-                                        if (it != null) {
-                                            fis.copyTo(it)
-                                            it.flush()
-                                            it.close()
-                                            fis.close()
-                                        }
-                                    }
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                        values.clear();
-                                        values.put(MediaStore.Images.Media.IS_PENDING, 0);
-                                        context.contentResolver.update(uri, values, null, null);
-                                    }
-                                    listener?.onCameraPhoto(file)
-                                }
-
-                            } else {
-                                listener?.onCameraPhoto(file)
-                            }
-
-                        }
-                    }
-
-                }
-
-                fun onError(imageCaptureError: ImageCapture.ImageCaptureError, message: String, cause: Throwable?) {
-                    val e = if (cause != null) {
-                        Exception(cause)
-                    } else {
-                        Exception()
-                    }
-                    listener?.onCameraError(message, e)
-                }
-            })
-        } else {
-            val options = ImageCapture.OutputFileOptions.Builder(file!!)
-            options.setMetadata(meta)
-            imageCapture?.takePicture(options.build(), imageCaptureExecutor, object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    if (saveToGallery && hasStoragePermission()) {
-                        val values = ContentValues().apply {
-                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                            put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
-
-                            put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
-                                put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                            }
-                        }
-
-                        val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
-                        if (uri == null) {
-                            listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
-                        } else {
-                            val fos = context.contentResolver.openOutputStream(uri)
-                            val fis = FileInputStream(file!!)
-                            fos.use {
-                                if (it != null) {
-                                    fis.copyTo(it)
-                                    it.flush()
-                                    it.close()
-                                    fis.close()
-                                }
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                values.clear()
-                                values.put(MediaStore.Images.Media.IS_PENDING, 0)
-                                context.contentResolver.update(uri, values, null, null)
-                            }
-                            listener?.onCameraPhoto(file)
-                        }
-
-                    } else {
-                        listener?.onCameraPhoto(file)
-                    }
+                    processImageProxy(image, fileName)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
                     listener?.onCameraError("Failed to take photo image", exception)
                 }
             })
+        } else {
+            val meta = ImageCapture.Metadata().apply {
+                isReversedHorizontal = position == CameraPosition.FRONT
+            }
+            val options = ImageCapture.OutputFileOptions.Builder(file!!)
+            options.setMetadata(meta)
+            imageCapture?.takePicture(options.build(), imageCaptureExecutor, object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    processImageFile(fileName) // outputFileResults.savedUri.toString() is null
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    listener?.onCameraError("Failed to take photo image", exception)
+                }
+            })
+        }
+    }
+
+    private fun processImageProxy(image: ImageProxy, fileName: String) {
+        var isError = false
+        var outputStream: FileOutputStream? = null
+        try {
+            val meta = ImageCapture.Metadata().apply {
+                isReversedHorizontal = position == CameraPosition.FRONT
+            }
+
+            val buffer = image.planes.first().buffer
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+
+            val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            val matrix = Matrix()
+
+            // Registering image's required rotation, provided by Androidx ImageAnalysis
+            var imageTargetRotation = image.imageInfo.rotationDegrees
+            matrix.postRotate(imageTargetRotation.toFloat())
+            Log.d("Camera2", "takePhoto: imageTargetRotation=$imageTargetRotation")
+
+            // Flipping over the image in case it is the front camera
+            if (position == CameraPosition.FRONT)
+                matrix.postScale(-1f, 1f)
+
+            var originalWidth = bm.width
+            var originalHeight = bm.height
+            var offsetWidth = 0
+            var offsetHeight = 0
+            if (autoSquareCrop) {
+                if (originalWidth < originalHeight) {
+                    offsetHeight = (originalHeight - originalWidth) / 2;
+                    originalHeight = originalWidth;
+                } else {
+                    offsetWidth = (originalWidth - originalHeight) / 2;
+                    originalWidth = originalHeight;
+                }
+            }
+            Log.d("Camera2", "takePhoto: originalWidth=$originalWidth, originalHeight=$originalHeight")
+            val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
+
+            outputStream = FileOutputStream(file!!, false)
+            rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+
+            val exif = ExifInterface(file!!.absolutePath)
+
+            val now = System.currentTimeMillis()
+            val datetime = convertToExifDateTime(now)
+
+            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
+            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
+
+            try {
+                val subsec = (now - convertFromExifDateTime(datetime).time).toString()
+                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
+                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
+            } catch (e: ParseException) {
+            }
+
+            exif.rotate(image.imageInfo.rotationDegrees)
+            if (meta.isReversedHorizontal) {
+                exif.flipHorizontally()
+            }
+            if (meta.isReversedVertical) {
+                exif.flipVertically()
+            }
+            if (meta.location != null) {
+                exif.setGpsInfo(meta.location!!)
+            }
+            exif.saveAttributes()
+
+            bm.recycle()
+            rotated.recycle()
+        } catch (e: Exception) {
+            isError = true
+            listener?.onCameraError("Failed to save photo.", e)
+        } finally {
+            try {
+                outputStream?.close()
+            } catch (e: IOException) {
+                //NOOP
+            }
+            try {
+                image.close()
+            } catch (e: Exception) {
+
+            }
+            if (!isError) {
+                if (saveToGallery && hasStoragePermission()) {
+                    val values = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                            put(MediaStore.MediaColumns.IS_PENDING, 1)
+                            put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                        }
+                    }
+
+                    val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                    if (uri == null) {
+                        listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
+                    } else {
+                        val fos = context.contentResolver.openOutputStream(uri)
+                        val fis = FileInputStream(file!!)
+                        fos.use {
+                            if (it != null) {
+                                fis.copyTo(it)
+                                it.flush()
+                                it.close()
+                                fis.close()
+                            }
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                            values.clear();
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                            context.contentResolver.update(uri, values, null, null);
+                        }
+                        listener?.onCameraPhoto(file)
+                    }
+
+                } else {
+                    listener?.onCameraPhoto(file)
+                }
+
+            }
+        }
+    }
+
+    private fun processImageFile(fileName: String) {
+        // Saving image to user gallery
+        if (saveToGallery && hasStoragePermission()) {
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
+
+                put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                    put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                }
+            }
+
+            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+            if (uri == null) {
+                listener?.onCameraError("Failed to add photo to gallery", Exception("Failed to create uri"))
+            } else {
+                val fos = context.contentResolver.openOutputStream(uri)
+                val fis = FileInputStream(file!!)
+                fos.use {
+                    if (it != null) {
+                        fis.copyTo(it)
+                        it.flush()
+                        it.close()
+                        fis.close()
+                    }
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
+                    values.clear()
+                    values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, values, null, null)
+                }
+                listener?.onCameraPhoto(file)
+            }
+
+        } else {
+            listener?.onCameraPhoto(file)
         }
     }
 
