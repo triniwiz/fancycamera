@@ -11,6 +11,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
 import android.view.Surface
+import android.view.TextureView
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
@@ -59,6 +60,13 @@ class Camera @JvmOverloads constructor(
             }
             handleZoom()
         }
+
+    override fun orientationUpdated() {
+        camera?.let {
+            updateCameraDisplayOrientation(context as Activity, position.value, it)
+        }
+    }
+
     override var whiteBalance: WhiteBalance = WhiteBalance.Auto
         set(value) {
             if (!isRecording || isTakingPhoto) {
@@ -93,6 +101,8 @@ class Camera @JvmOverloads constructor(
                 field = value
             }
         }
+
+    private var previewView: TextureView = TextureView(context, attrs, defStyleAttr)
 
     private fun handleBarcodeScanning(data: ByteArray, camera: Camera): Task<Boolean>? {
         if (!isBarcodeScanningSupported || !(detectorType == DetectorType.Barcode || detectorType == DetectorType.All)) {
@@ -245,8 +255,9 @@ class Camera @JvmOverloads constructor(
     }
 
     init {
+        addView(previewView)
         detectSupport()
-        surfaceTextureListener = object : SurfaceTextureListener {
+        previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
                 cameraExecutor.execute {
                     initCamera()
@@ -292,6 +303,9 @@ class Camera @JvmOverloads constructor(
     override var autoSquareCrop: Boolean = false
 
     override var autoFocus: Boolean = false
+
+    override val previewSurface: Any
+        get() = previewView
 
     override var position: CameraPosition = CameraPosition.BACK
         set(value) {
@@ -373,7 +387,7 @@ class Camera @JvmOverloads constructor(
     }
 
     private fun initCamera() {
-        if (surfaceTexture == null) {
+        if (previewView.surfaceTexture == null) {
             return
         }
         val cameraInfo = Camera.CameraInfo()
@@ -435,7 +449,7 @@ class Camera @JvmOverloads constructor(
             updateAutoFocus()
             val parameters = camera?.parameters
             parameters?.flashMode = getFlashMode()
-            camera?.setPreviewTexture(surfaceTexture)
+            camera?.setPreviewTexture(previewView.surfaceTexture)
             if (parameters?.isAutoWhiteBalanceLockSupported == true && parameters.supportedWhiteBalance != null) {
                 val supportedWhiteBalance = parameters.supportedWhiteBalance
                 when (whiteBalance) {
@@ -682,11 +696,19 @@ class Camera @JvmOverloads constructor(
 
                             bm = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false)
 
-                            bm.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+
+                            var override: Bitmap? = null
+                            if (overridePhotoHeight > 0 && overridePhotoWidth > 0) {
+                                override = Bitmap.createScaledBitmap(bm, overridePhotoWidth, originalHeight, false)
+                                override.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+                            }else {
+                                bm.compress(Bitmap.CompressFormat.JPEG, 92, fos)
+                            }
 
                             fos.close()
                             tmpFos.close()
                             bm.recycle()
+                            override?.recycle()
                             tmpFile.delete()
                         } else {
                             fos = FileOutputStream(file)

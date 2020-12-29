@@ -13,15 +13,13 @@ import android.provider.MediaStore
 import android.util.AttributeSet
 import android.util.Log
 import android.view.Surface
-import android.view.WindowManager
 import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
-import androidx.camera.core.Camera
 import androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.LifecycleOwner
@@ -37,6 +35,7 @@ import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.min
 
 
@@ -44,19 +43,17 @@ import kotlin.math.min
 class Camera2 @JvmOverloads constructor(
         context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : CameraBase(context, attrs, defStyleAttr) {
-    private var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
+    private var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
     private var cameraProvider: ProcessCameraProvider? = null
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: androidx.camera.core.ImageAnalysis? = null
     private var videoCapture: VideoCapture? = null
-    private var previewExecutor = Executors.newSingleThreadExecutor()
     private var imageAnalysisExecutor = Executors.newSingleThreadExecutor()
     private var imageCaptureExecutor = Executors.newSingleThreadExecutor()
     private var videoCaptureExecutor = Executors.newSingleThreadExecutor()
-    private var camera: Camera? = null
+    private var camera: androidx.camera.core.Camera? = null
     private var preview: Preview? = null
     private var surfaceRequest: SurfaceRequest? = null
-    private var surface: Surface? = null
     private var isStarted = false
     private var isRecording = false
     private var file: File? = null
@@ -69,6 +66,10 @@ class Camera2 @JvmOverloads constructor(
         )
     }
 
+    override val previewSurface: Any
+        get() {
+            return previewView
+        }
     override var zoom: Float = 0.0F
         set(value) {
             field = when {
@@ -125,6 +126,8 @@ class Camera2 @JvmOverloads constructor(
                 field = value
             }
         }
+
+    private var previewView: PreviewView = PreviewView(context, attrs, defStyleAttr)
 
     @SuppressLint("UnsafeExperimentalUsageError")
     private fun handleBarcodeScanning(proxy: ImageProxy): Task<Boolean>? {
@@ -322,44 +325,29 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    private var lastOrientation = -1
-    override fun onConfigurationChanged(newConfig: Configuration?) {
-        super.onConfigurationChanged(newConfig)
-        if (newConfig != null) {
-            if (lastOrientation != newConfig.orientation) {
-                lastOrientation = newConfig.orientation
-                val rotation = display.rotation
-                Log.d("Camera2", "onConfigurationChanged orientation:${newConfig.orientation} rotation:$rotation")
-                val targetRotation = getTargetRotation()
-                imageCapture?.targetRotation = targetRotation
-
-                @SuppressLint("UnsafeExperimentalUsageError")
-                preview?.targetRotation = (4 - rotation) % 4
-            }
-        }
-    }
-
     init {
-        detectSupport()
-        surfaceTextureListener = object : SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
-                initSurface()
-                listener?.onReady()
-            }
-
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
-
-            }
-
-            override fun onSurfaceTextureDestroyed(surface: SurfaceTexture): Boolean {
-                surfaceRequest?.willNotProvideSurface()
-                return false
-            }
-
-            override fun onSurfaceTextureUpdated(surface: SurfaceTexture) {
-                onSurfaceUpdateListener?.onUpdate()
+        previewView.afterMeasured {
+            if (autoFocus) {
+                val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
+                        previewView.width.toFloat(), previewView.height.toFloat())
+                val centerWidth = previewView.width.toFloat() / 2
+                val centerHeight = previewView.height.toFloat() / 2
+                val autoFocusPoint = factory.createPoint(centerWidth, centerHeight)
+                try {
+                    camera?.cameraControl?.startFocusAndMetering(
+                            FocusMeteringAction.Builder(
+                                    autoFocusPoint,
+                                    FocusMeteringAction.FLAG_AF
+                            ).apply {
+                                setAutoCancelDuration(2, TimeUnit.SECONDS)
+                            }.build()
+                    )
+                } catch (e: CameraInfoUnavailableException) {
+                }
             }
         }
+        addView(previewView)
+        detectSupport()
 
         // TODO: Bind this to the view's onCreate method
         cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -369,17 +357,11 @@ class Camera2 @JvmOverloads constructor(
                 cameraProvider = cameraProviderFuture.get()
                 refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
+                e.printStackTrace()
                 listener?.onCameraError("Failed to get camera", e)
                 isStarted = false
             }
         }, ContextCompat.getMainExecutor(context))
-    }
-
-    private val surfaceProvider = object: Preview.SurfaceProvider {
-        override fun onSurfaceRequested(request: SurfaceRequest) {
-            surfaceRequest = request
-            initSurface()
-        }
     }
 
     override var allowExifRotation: Boolean = true
@@ -394,11 +376,7 @@ class Camera2 @JvmOverloads constructor(
         set(value) {
             field = value
             if (!isRecording) {
-                if (imageAnalysis != null) {
-                    if (getTargetRotation() != -1) {
-                        imageAnalysis?.targetRotation = getTargetRotation()
-                    }
-                } else {
+                if (imageAnalysis == null) {
                     setUpAnalysis()
                 }
                 if (value == DetectorType.None) {
@@ -452,6 +430,11 @@ class Camera2 @JvmOverloads constructor(
      * TODO: link this to the code, overriding or affecting targetRotation logic */
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
+    @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
+    override fun orientationUpdated() {
+
+    }
+
     private fun getDeviceRotation(): Int {
         return when (this.rotation) {
             CameraOrientation.PORTRAIT_UPSIDE_DOWN -> Surface.ROTATION_270
@@ -462,58 +445,14 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    /** Values 0=undefined, 1=portait, 2=landscape */
-    private fun getViewOrientation(): Int {
-        // https://stackoverflow.com/questions/2795833/check-orientation-on-android-phone
-        return if (context is AppCompatActivity)
-            context.resources.configuration.orientation
-        else
-            resources.configuration.orientation
-    }
-
-    /** Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
-    private fun getViewRotation(): Int {
-        // Note: API R ( 30 ) has context.display
-        if (Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            val display = context.display
-            if (display != null)
-                return display.rotation
-        } else {
-            val windowService = (context as? AppCompatActivity)?.let { it.windowManager }
-                ?: context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            @Suppress("DEPRECATION")
-            return windowService.getDefaultDisplay().getRotation()
-        }
-        return 0
-    }
-
-    /**
-     * Calculates the targetRotation provided to CameraX components
-     * Values -1 is undefiend, 1 = 90 degrees, 2 = 180 degrees, 3 = 270 degrees */
-    private fun getTargetRotation(): Int {
-        val viewOrientation = resources.configuration.orientation
-        val viewRotation = this.display.rotation
-
-        // Device orientation
-        val ori = if (currentOrientation >= 0) currentOrientation / 90 else 0
-
-        // Camera direction
-        val cam = when (position) { CameraPosition.BACK -> 1; CameraPosition.FRONT -> -1 else -> 0}
-
-        // Main equation
-        val target = (4 + viewRotation * cam) % 4
-        // TODO: Allow switching between different equations (depends on how the App is designed)
-
-        Log.d("Camera2", "getDeviceRotation variables: o$ori, c$cam, vo$viewOrientation, vr$viewRotation, t$target")
-
-        return target
-    }
-
     private fun safeUnbindAll() {
         try {
             cameraProvider?.unbindAll()
         } catch (e: Exception) {
         } finally {
+            if (isStarted) {
+                listener?.onCameraClose()
+            }
             isStarted = false
         }
     }
@@ -522,8 +461,24 @@ class Camera2 @JvmOverloads constructor(
         set(value) {
             if (!isRecording && field != value) {
                 field = value
-                safeUnbindAll()
-                refreshCamera()
+                videoCapture?.let {
+                    cameraProvider?.let {
+                        var wasBound = false
+                        if (it.isBound(videoCapture!!)) {
+                            wasBound = true
+                            it.unbind(imageCapture!!)
+                        }
+
+                        videoCapture = null
+                        initVideoCapture()
+
+                        if (wasBound) {
+                            if (!it.isBound(videoCapture!!)) {
+                                it.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), videoCapture!!)
+                            }
+                        }
+                    }
+                }
             }
         }
     override var db: Double
@@ -552,9 +507,6 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
-                    if (getTargetRotation() != -1) {
-                        setTargetRotation(getTargetRotation())
-                    }
                     setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
                 }
         val extender = Camera2Interop.Extender(builder)
@@ -644,9 +596,6 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
             setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            if (getTargetRotation() != -1) {
-                setTargetRotation(getTargetRotation())
-            }
             setFlashMode(getFlashMode())
         }
 
@@ -703,7 +652,7 @@ class Camera2 @JvmOverloads constructor(
             }
         }
     }
-    
+
     private fun initPreview() {
         preview = Preview.Builder()
                 .apply {
@@ -713,31 +662,27 @@ class Camera2 @JvmOverloads constructor(
                                 else -> AspectRatio.RATIO_4_3
                             }
                     )
-                    val rotation = display.rotation
-                    if (rotation != -1)
-                        setTargetRotation((4 - rotation) % 4)
                 }
                 .build()
                 .also {
-                    it.setSurfaceProvider(this.surfaceProvider)
+                    it.setSurfaceProvider(this.previewView.surfaceProvider)
                 }
+
 
         camera = if (detectorType != DetectorType.None && isMLSupported) {
             cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview, imageAnalysis)
         } else {
             cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), preview)
         }
+        listener?.onReady()
     }
 
     @SuppressLint("RestrictedApi")
     private fun initVideoCapture() {
-        if (hasAudioPermission()) {
+        if (hasCameraPermission() && hasAudioPermission()) {
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
                     .apply {
-                        if (getTargetRotation() != -1) {
-                            setTargetRotation(getTargetRotation())
-                        }
                         setTargetResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
                         setMaxResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
 
@@ -775,8 +720,6 @@ class Camera2 @JvmOverloads constructor(
         imageAnalysis = null
         preview?.setSurfaceProvider(null)
         preview = null
-        surfaceRequest?.willNotProvideSurface()
-        surfaceRequest = null
         safeUnbindAll()
 
         if (detectorType != DetectorType.None) {
@@ -789,13 +732,13 @@ class Camera2 @JvmOverloads constructor(
 
         handleZoom()
 
-        if (camera?.cameraInfo != null) {
-            val streamMap = Camera2CameraInfo.from(camera!!.cameraInfo).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        camera?.cameraInfo?.let {
+            val streamMap = Camera2CameraInfo.from(it).getCameraCharacteristic(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
 
             if (streamMap != null) {
                 val sizes =
-                    streamMap.getOutputSizes(ImageFormat.JPEG) +
-                    streamMap.getOutputSizes(SurfaceTexture::class.java)
+                        streamMap.getOutputSizes(ImageFormat.JPEG) +
+                                streamMap.getOutputSizes(SurfaceTexture::class.java)
                 for (size in sizes) {
                     val aspect = size.width.toFloat() / size.height.toFloat()
                     var key: String? = null
@@ -809,34 +752,20 @@ class Camera2 @JvmOverloads constructor(
                     }
 
                     if (key != null) {
-                        val list = cachedPictureRatioSizeMap.get(key)
-                        if (list == null) {
-                            cachedPictureRatioSizeMap.put(key, mutableListOf(value))
-                        } else {
+                        val list = cachedPictureRatioSizeMap[key]
+                        list?.let {
                             list.add(value)
+                        } ?: run {
+                            cachedPictureRatioSizeMap[key] = mutableListOf(value)
                         }
                     }
                 }
             }
         }
-
         updateImageCapture()
 
         isStarted = true
-    }
-
-    private fun initSurface() {
-        if (isAvailable && surfaceRequest != null) {
-            surfaceTexture!!.setDefaultBufferSize(surfaceRequest!!.resolution.width, surfaceRequest!!.resolution.height)
-            surface = Surface(surfaceTexture!!)
-            surfaceRequest!!.provideSurface(surface!!, previewExecutor, {
-                listener?.onCameraClose()
-                surface = null
-                isStarted = false
-            })
-            isStarted = true
-            listener?.onCameraOpen()
-        }
+        listener?.onCameraOpen()
     }
 
 
@@ -880,7 +809,7 @@ class Camera2 @JvmOverloads constructor(
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         val fileName = "VID_" + df.format(today) + ".mp4"
-        if (saveToGallery && hasStoragePermission()) {
+        file = if (saveToGallery && hasStoragePermission()) {
             val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
             if (externalDir == null) {
                 listener?.onCameraError("Cannot save video to gallery", Exception("Failed to create uri"))
@@ -889,28 +818,27 @@ class Camera2 @JvmOverloads constructor(
                 if (!externalDir.exists()) {
                     externalDir.mkdirs()
                 }
-                file = File(externalDir, fileName)
+                File(externalDir, fileName)
             }
 
         } else {
-            file = File(context.getExternalFilesDir(null), fileName)
+            File(context.getExternalFilesDir(null), fileName)
         }
 
         try {
             if (videoCapture == null) {
                 initVideoCapture()
             }
-            if (cameraProvider != null) {
-                if (cameraProvider!!.isBound(imageCapture!!)) {
-                    cameraProvider?.unbind(imageCapture!!)
+            cameraProvider?.let {
+                if (it.isBound(imageCapture!!)) {
+                    it.unbind(imageCapture!!)
                 }
 
-                if (!cameraProvider!!.isBound(videoCapture!!)) {
-                    cameraProvider?.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), videoCapture!!)
+                if (!it.isBound(videoCapture!!)) {
+                    it.bindToLifecycle(context as LifecycleOwner, selectorFromPosition(), videoCapture!!)
                 }
             }
             val meta = VideoCapture.Metadata().apply {}
-
             val options = VideoCapture.OutputFileOptions.Builder(file!!)
             options.setMetadata(meta)
             videoCapture?.startRecording(options.build(), videoCaptureExecutor, object : VideoCapture.OnVideoSavedCallback {
@@ -1003,12 +931,12 @@ class Camera2 @JvmOverloads constructor(
             if (file != null) {
                 file!!.delete()
             }
-            if (cameraProvider != null) {
-                if (cameraProvider!!.isBound(videoCapture!!)) {
-                    cameraProvider?.unbind(videoCapture!!)
+            cameraProvider?.let {
+                if (it.isBound(videoCapture!!)) {
+                    it.unbind(videoCapture!!)
                 }
-                if (cameraProvider!!.isBound(imageCapture!!)) {
-                    cameraProvider?.unbind(imageCapture!!)
+                if (it.isBound(imageCapture!!)) {
+                    it.unbind(imageCapture!!)
                 }
             }
             isForceStopping = false
@@ -1058,7 +986,7 @@ class Camera2 @JvmOverloads constructor(
             return
         }
 
-        val useImageProxy = autoSquareCrop || (allowExifRotation == false)
+        val useImageProxy = autoSquareCrop || !allowExifRotation
         if (useImageProxy) {
             imageCapture?.takePicture(imageCaptureExecutor, object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
@@ -1125,10 +1053,16 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
             Log.d("Camera2", "takePhoto: originalWidth=$originalWidth, originalHeight=$originalHeight")
-            val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false);
-
+            val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false)
             outputStream = FileOutputStream(file!!, false)
-            rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+            var override: Bitmap? = null
+            if (overridePhotoHeight > 0 && overridePhotoWidth > 0) {
+                override = Bitmap.createScaledBitmap(rotated, overridePhotoWidth, overridePhotoHeight, false)
+                override.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+            } else {
+                rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+            }
+
 
             val exif = ExifInterface(file!!.absolutePath)
 
@@ -1159,6 +1093,7 @@ class Camera2 @JvmOverloads constructor(
 
             bm.recycle()
             rotated.recycle()
+            override?.recycle()
         } catch (e: Exception) {
             isError = true
             listener?.onCameraError("Failed to save photo.", e)
@@ -1299,9 +1234,13 @@ class Camera2 @JvmOverloads constructor(
 
 
     override fun release() {
-        stop()
         if (!isForceStopping) {
-            safeUnbindAll()
+            if (isRecording) {
+                isForceStopping = true
+                stopRecording()
+            } else {
+                safeUnbindAll()
+            }
             preview?.setSurfaceProvider(null)
             preview = null
             imageCapture = null
