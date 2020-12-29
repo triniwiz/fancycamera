@@ -4,7 +4,6 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
-import android.content.res.Configuration
 import android.media.CamcorderProfile
 import android.media.MediaRecorder
 import android.os.Build
@@ -13,7 +12,7 @@ import android.os.Looper
 import android.util.AttributeSet
 import android.util.Log
 import android.view.OrientationEventListener
-import android.view.TextureView
+import android.widget.FrameLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import java.io.IOException
@@ -25,7 +24,7 @@ import java.util.concurrent.Executors
 
 abstract class CameraBase @JvmOverloads constructor(
         context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
-) : TextureView(context, attrs, defStyleAttr) {
+) : FrameLayout(context, attrs, defStyleAttr) {
     abstract var whiteBalance: WhiteBalance
     abstract var position: CameraPosition
     abstract var rotation: CameraOrientation
@@ -45,6 +44,8 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract var isAudioLevelsEnabled: Boolean
     abstract val numberOfCameras: Int
     abstract var detectorType: DetectorType
+    var overridePhotoWidth: Int = -1
+    var overridePhotoHeight: Int = -1
     abstract fun stop()
     abstract fun release()
     abstract fun startPreview()
@@ -101,6 +102,8 @@ abstract class CameraBase @JvmOverloads constructor(
         val height = size[1].toIntOrNull() ?: 0
         return Size(width, height)
     }
+
+    abstract val previewSurface: Any
 
     internal val mainHandler = Handler(Looper.getMainLooper())
 
@@ -218,6 +221,8 @@ abstract class CameraBase @JvmOverloads constructor(
 
     /** Device orientation in degrees 0-359 */
     internal var currentOrientation: Int = OrientationEventListener.ORIENTATION_UNKNOWN
+
+    internal abstract fun orientationUpdated();
 
     internal val VIDEO_RECORDER_PERMISSIONS_REQUEST = 868
     internal val VIDEO_RECORDER_PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)

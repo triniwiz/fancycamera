@@ -32,7 +32,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        FancyCamera.forceV1 = true
+        // FancyCamera.forceV1 = true
         setContentView(R.layout.activity_main)
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
@@ -46,6 +46,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onCameraOpenUI() {
+
                 Log.d("co.fitcom.test", "Camera Opened")
 
                 // cameraView.getAvailablePictureSizes
@@ -71,7 +72,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onCameraVideoStartUI() {
-                println("Recording Started")
+                Log.d("co.fitcom.test", "Recording Started")
                 timer = Timer()
                 timerTask = object : TimerTask() {
                     override fun run() {
@@ -91,7 +92,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.All
+        cameraView.detectorType = DetectorType.None // disable to use recorder
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: String) {
                 println("setOnBarcodeScanningListener: Success $result")
@@ -153,11 +154,13 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.saveToGallery = true
+        container.addView(cameraView)
     }
 
     fun startRecording(view: View) {
         cameraView.quality = Quality.HIGHEST
         cameraView.startRecording()
+
     }
 
     fun stopRecording(view: View) {
@@ -211,11 +214,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        container.addView(cameraView)
         if (!cameraView.hasPermission()) {
             cameraView.requestPermission()
         } else {
-       //     cameraView.startPreview()
+           cameraView.startPreview()
         }
     }
 

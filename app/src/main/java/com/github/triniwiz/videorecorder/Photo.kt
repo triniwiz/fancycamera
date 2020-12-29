@@ -23,7 +23,7 @@ class Photo : AppCompatActivity() {
 
         imageView = findViewById(R.id.imageView)
         cameraView = findViewById(R.id.PhotoView)
-        FancyCamera.forceV1 = true
+        //FancyCamera.forceV1 = true
         cameraView.autoFocus = true
         cameraView.quality = Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {

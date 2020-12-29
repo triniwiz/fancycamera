@@ -164,6 +164,11 @@ class FancyCamera : FrameLayout {
         init(context, attrs)
     }
 
+    val previewView: Any
+        get() {
+            return cameraView.previewSurface
+        }
+
     private fun init(context: Context, attrs: AttributeSet?) {
         cameraView = if (forceV1) {
             Camera(context, attrs)
@@ -204,6 +209,21 @@ class FancyCamera : FrameLayout {
     fun setOnTextRecognitionListener(callback: ImageAnalysisCallback?) {
         cameraView.setOnTextRecognitionListener(callback)
     }
+
+    var overridePhotoWidth: Int
+        set(value) {
+            cameraView.overridePhotoWidth = value
+        }
+        get() {
+            return cameraView.overridePhotoWidth
+        }
+    var overridePhotoHeight: Int
+        set(value) {
+            cameraView.overridePhotoHeight = value
+        }
+        get() {
+            return cameraView.overridePhotoHeight
+        }
 
     fun takePhoto() {
         cameraView.takePhoto()
