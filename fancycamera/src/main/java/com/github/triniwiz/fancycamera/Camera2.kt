@@ -432,7 +432,15 @@ class Camera2 @JvmOverloads constructor(
 
     @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
     override fun orientationUpdated() {
-
+        val rotation =  when (currentOrientation) {
+            270 -> Surface.ROTATION_270
+            180 -> Surface.ROTATION_180
+            90 -> Surface.ROTATION_90
+            else -> Surface.ROTATION_0
+        }
+        imageCapture?.targetRotation = rotation
+        videoCapture?.setTargetRotation(rotation)
+        imageAnalysis?.targetRotation = rotation
     }
 
     private fun getDeviceRotation(): Int {
@@ -507,6 +515,9 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
+                    if(getDeviceRotation() > -1){
+                        setTargetRotation(getDeviceRotation())
+                    }
                     setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
                 }
         val extender = Camera2Interop.Extender(builder)
@@ -574,6 +585,9 @@ class Camera2 @JvmOverloads constructor(
         }
 
         val builder = ImageCapture.Builder().apply {
+            if(getDeviceRotation() > -1){
+                setTargetRotation(getDeviceRotation())
+            }
             if (pictureSize == "0x0") {
                 setTargetAspectRatio(
                         when (displayRatio) {
@@ -683,6 +697,9 @@ class Camera2 @JvmOverloads constructor(
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
                     .apply {
+                        if(getDeviceRotation() > -1){
+                            setTargetRotation(getDeviceRotation())
+                        }
                         setTargetResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
                         setMaxResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
 
@@ -1033,7 +1050,6 @@ class Camera2 @JvmOverloads constructor(
             // Registering image's required rotation, provided by Androidx ImageAnalysis
             var imageTargetRotation = image.imageInfo.rotationDegrees
             matrix.postRotate(imageTargetRotation.toFloat())
-            Log.d("Camera2", "takePhoto: imageTargetRotation=$imageTargetRotation")
 
             // Flipping over the image in case it is the front camera
             if (position == CameraPosition.FRONT)
@@ -1052,7 +1068,6 @@ class Camera2 @JvmOverloads constructor(
                     originalWidth = originalHeight;
                 }
             }
-            Log.d("Camera2", "takePhoto: originalWidth=$originalWidth, originalHeight=$originalHeight")
             val rotated = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false)
             outputStream = FileOutputStream(file!!, false)
             var override: Bitmap? = null
