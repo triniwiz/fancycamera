@@ -3,6 +3,7 @@ package com.github.triniwiz.fancycamera
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.media.CamcorderProfile
 import android.media.MediaRecorder
@@ -220,9 +221,9 @@ abstract class CameraBase @JvmOverloads constructor(
     }
 
     /** Device orientation in degrees 0-359 */
-    internal var currentOrientation: Int = OrientationEventListener.ORIENTATION_UNKNOWN
+    var currentOrientation: Int = OrientationEventListener.ORIENTATION_UNKNOWN
 
-    internal abstract fun orientationUpdated();
+    abstract fun orientationUpdated();
 
     internal val VIDEO_RECORDER_PERMISSIONS_REQUEST = 868
     internal val VIDEO_RECORDER_PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
@@ -244,23 +245,30 @@ abstract class CameraBase @JvmOverloads constructor(
 
     private val orientationEventListener = object : OrientationEventListener(context) {
         override fun onOrientationChanged(orientation: Int) {
-            // Based on: https://developer.android.com/reference/androidx/camera/core/ImageAnalysis#setTargetRotation(int)
-            val newOrientation = when (orientation) {
-                in 0..20, in 340..359 -> 0
-                in 70..110 -> 90
-                in 250..290 -> 270
-                in 160..200 -> 180
-                else -> currentOrientation
-            }
-            if (newOrientation != currentOrientation) {
-                Log.d("CameraBase", "Event: onOrientationChanged($orientation) -> currentOrientation = $currentOrientation to $newOrientation");
-                currentOrientation = newOrientation
+            if(rotation == CameraOrientation.UNKNOWN){
+                val newOrientation = when (orientation) {
+                    in 45 until 135 -> 270
+                    in 135 until 225 -> 180
+                    in 225 until 315 -> 90
+                    else -> 0
+                }
+
+                if (newOrientation != currentOrientation) {
+                    currentOrientation = newOrientation
+                    orientationUpdated()
+                }
             }
         }
     }
 
     init {
         orientationEventListener.enable()
+    }
+
+    @Synchronized
+    @Throws(Throwable::class)
+    protected fun finalize() {
+        orientationEventListener.disable()
     }
 
 
