@@ -16,7 +16,7 @@ afterEvaluate {
                 // You can then customize attributes of the publication as shown below.
                 groupId = 'com.github.triniwiz'
                 artifactId = 'fancycamera'
-                version = '3.0.0-alpha17'
+                version = '3.0.0-alpha18'
             }
         }
     }

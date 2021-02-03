@@ -104,6 +104,14 @@ abstract class CameraBase @JvmOverloads constructor(
         return Size(width, height)
     }
 
+    fun toggleFlash(){
+        flashMode = if(flashMode == CameraFlashMode.OFF){
+            CameraFlashMode.ON
+        }else {
+            CameraFlashMode.OFF
+        }
+    }
+
     abstract val previewSurface: Any
 
     internal val mainHandler = Handler(Looper.getMainLooper())

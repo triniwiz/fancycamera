@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
-import android.util.Log
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -432,7 +431,7 @@ class Camera2 @JvmOverloads constructor(
 
     @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
     override fun orientationUpdated() {
-        val rotation =  when (currentOrientation) {
+        val rotation = when (currentOrientation) {
             270 -> Surface.ROTATION_270
             180 -> Surface.ROTATION_180
             90 -> Surface.ROTATION_90
@@ -515,7 +514,7 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
-                    if(getDeviceRotation() > -1){
+                    if (getDeviceRotation() > -1) {
                         setTargetRotation(getDeviceRotation())
                     }
                     setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
@@ -585,7 +584,7 @@ class Camera2 @JvmOverloads constructor(
         }
 
         val builder = ImageCapture.Builder().apply {
-            if(getDeviceRotation() > -1){
+            if (getDeviceRotation() > -1) {
                 setTargetRotation(getDeviceRotation())
             }
             if (pictureSize == "0x0") {
@@ -697,7 +696,7 @@ class Camera2 @JvmOverloads constructor(
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
                     .apply {
-                        if(getDeviceRotation() > -1){
+                        if (getDeviceRotation() > -1) {
                             setTargetRotation(getDeviceRotation())
                         }
                         setTargetResolution(android.util.Size(profile.videoFrameWidth, profile.videoFrameHeight))
@@ -798,10 +797,7 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    override var flashMode: CameraFlashMode
-        get() {
-            return CameraFlashMode.OFF
-        }
+    override var flashMode: CameraFlashMode = CameraFlashMode.OFF
         set(value) {
             if (camera != null) {
                 when (value) {
@@ -809,11 +805,11 @@ class Camera2 @JvmOverloads constructor(
                         camera?.cameraControl?.enableTorch(false)
                         imageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
                     }
-                    CameraFlashMode.ON -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
-                    CameraFlashMode.AUTO -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
-                    CameraFlashMode.RED_EYE -> ImageCapture.FLASH_MODE_ON
-                    CameraFlashMode.TORCH -> camera?.cameraControl?.enableTorch(false)
+                    CameraFlashMode.ON, CameraFlashMode.RED_EYE -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_ON
+                    CameraFlashMode.AUTO -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_AUTO
+                    CameraFlashMode.TORCH -> camera?.cameraControl?.enableTorch(true)
                 }
+                field = value
             }
         }
 
