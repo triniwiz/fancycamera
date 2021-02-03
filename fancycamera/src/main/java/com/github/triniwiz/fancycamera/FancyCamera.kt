@@ -312,6 +312,10 @@ class FancyCamera : FrameLayout {
         cameraView.toggleCamera()
     }
 
+    fun toggleFlash(){
+        cameraView.toggleFlash()
+    }
+
     fun setEnableAudioLevels(enableAudioLevels: Boolean) {
         cameraView.isAudioLevelsEnabled = enableAudioLevels
     }
