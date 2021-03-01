@@ -11,7 +11,7 @@
         android:id="@+id/PhotoView"
         android:layout_width="match_parent"
         android:layout_height="174dp"
-        app:position="front" />
+        app:cameraPosition="front" />
 
 
     <Button
