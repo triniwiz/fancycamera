@@ -22,7 +22,7 @@
     <uses-sdk tools:overrideLibrary="androidx.camera.view,androidx.camera.extensions,androidx.camera.camera2,androidx.camera.lifecycle,androidx.camera.core"/>
     <application>
         <provider
-            android:name="androidx.core.content.FileProvider"
+            android:name=".FancyCameraFileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true"
