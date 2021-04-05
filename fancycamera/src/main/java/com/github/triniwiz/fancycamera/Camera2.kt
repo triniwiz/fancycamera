@@ -854,6 +854,9 @@ class Camera2 @JvmOverloads constructor(
             val meta = VideoCapture.Metadata().apply {}
             val options = VideoCapture.OutputFileOptions.Builder(file!!)
             options.setMetadata(meta)
+            if (flashMode == CameraFlashMode.ON) {
+                camera?.cameraControl?.enableTorch(true)
+            }
             videoCapture?.startRecording(options.build(), videoCaptureExecutor, object : VideoCapture.OnVideoSavedCallback {
                 override fun onVideoSaved(outputFileResults: VideoCapture.OutputFileResults) {
 
@@ -959,6 +962,9 @@ class Camera2 @JvmOverloads constructor(
 
     @SuppressLint("RestrictedApi")
     override fun stopRecording() {
+        if (flashMode == CameraFlashMode.ON) {
+            camera?.cameraControl?.enableTorch(false)
+        }
         videoCapture?.stopRecording()
     }
 

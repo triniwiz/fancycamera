@@ -351,6 +351,7 @@ class Camera @JvmOverloads constructor(
             CameraFlashMode.AUTO -> Camera.Parameters.FLASH_MODE_AUTO
             CameraFlashMode.ON -> Camera.Parameters.FLASH_MODE_ON
             CameraFlashMode.RED_EYE -> Camera.Parameters.FLASH_MODE_RED_EYE
+            CameraFlashMode.TORCH -> Camera.Parameters.FLASH_MODE_TORCH
             else -> Camera.Parameters.FLASH_MODE_OFF
         }
     }
@@ -870,6 +871,9 @@ class Camera @JvmOverloads constructor(
                     recorder.setAudioEncoder(profile.audioCodec)
                     recorder.setOutputFile(file!!.path)
                     recorder.prepare()
+                    if (flashMode == CameraFlashMode.ON){
+                        camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_TORCH
+                    }
                     recorder.start()
                     isRecording = true
                     startDurationTimer()
@@ -891,6 +895,9 @@ class Camera @JvmOverloads constructor(
                     return@execute
                 }
                 try {
+                    if (flashMode == CameraFlashMode.ON){
+                        camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_ON
+                    }
                     recorder.stop()
                     stopDurationTimer()
                     recorder.reset()
