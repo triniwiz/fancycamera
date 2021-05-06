@@ -1,40 +1,33 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext.kotlin_version = '1.4.20'
+    ext.kotlin_version = '1.5.0'
 
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.1.1'
-        //classpath 'com.novoda:bintray-release:0.9.2'
-       // classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1' // Add this line for jitpack
-
-        File file = project.rootProject.file('local.properties')
-        if (file.exists()) {
-            boolean upload2maven = project.hasProperty("for.upload") ? project.property("for.upload") : "false"
-            if (upload2maven) {
-                println ':global:include upload 2 maven classpath'
-                classpath 'com.github.dcendents:android-maven-gradle-plugin:2.0'
-                classpath 'com.jfrog.bintray.gradle:gradle-bintray-plugin:1.8.5'
-            }
-        }
+        classpath 'com.android.tools.build:gradle:4.2.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
+        classpath 'com.vanniktech:gradle-maven-publish-plugin:0.15.1'
+        classpath 'org.jetbrains.dokka:dokka-gradle-plugin:1.4.30'
     }
 }
 
 allprojects {
+    plugins.withId("com.vanniktech.maven.publish") {
+        mavenPublish {
+            sonatypeHost = "S01"
+        }
+    }
+
     repositories {
         google()
-        jcenter()
-        maven { url "https://jitpack.io" }
+        mavenCentral()
     }
 }
+
 
 task clean(type: Delete) {
     delete rootProject.buildDir

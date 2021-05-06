@@ -7,11 +7,11 @@
     android:orientation="vertical"
     tools:context=".Photo">
 
-    <com.github.triniwiz.fancycamera.FancyCamera
+    <io.github.triniwiz.fancycamera.FancyCamera
         android:id="@+id/PhotoView"
         android:layout_width="match_parent"
         android:layout_height="174dp"
-        app:cameraPosition="front" />
+        app:fcCameraPosition="front" />
 
 
     <Button

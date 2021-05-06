@@ -1,50 +1,70 @@
+apply plugin: 'maven'
+apply plugin: 'signing'
 apply plugin: 'maven-publish'
-apply plugin: 'com.jfrog.bintray'
 
-group 'com.github.triniwiz.fancycamera'
-version '3.0.0-alpha19'
+tasks.withType(Javadoc) {
+    failOnError false
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.addStringOption('encoding', 'UTF-8')
+    options.addStringOption('charSet', 'UTF-8')
+}
+
+task sourceJar(type: Jar) {
+    from android.sourceSets.main.java.srcDirs
+    classifier "sources"
+}
 
 
-afterEvaluate {
-    publishing {
-        publications {
-            // Creates a Maven publication called "release".
-            release(MavenPublication) {
-                // Applies the component for the release build variant.
-                from components.release
+group = "io.github.triniwiz"
+archivesBaseName = "fancycamera"
+version = "3.0.0-alpha21"
+afterEvaluate { project ->
+    uploadArchives {
+        repositories {
+            mavenDeployer {
+                beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
 
-                // You can then customize attributes of the publication as shown below.
-                groupId = 'com.github.triniwiz'
-                artifactId = 'fancycamera'
-                version = '3.0.0-alpha19'
+                repository(url: "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/") {
+                    authentication(userName: ossrhUsername, password: ossrhPassword)
+                }
+
+                snapshotRepository(url: "https://s01.oss.sonatype.org/content/repositories/snapshots/") {
+                    authentication(userName: ossrhUsername, password: ossrhPassword)
+                }
+
+                pom.project {
+                    name "FancyCamera"
+                    packaging 'aar'
+                    description "Fancy Android Camera"
+                    url 'https://github.com/triniwiz/fancycamera'
+
+                    scm {
+                        connection 'scm:git@github.com:triniwiz/fancycamera.git'
+                        developerConnection 'scm:git@github.com:triniwiz/fancycamera.git'
+                        url 'https://github.com/triniwiz/fancycamera'
+                    }
+
+                    licenses {
+                        license {
+                            name 'MIT License'
+                            url 'https://github.com/triniwiz/fancycamera/blob/master/LICENSE'
+                        }
+                    }
+
+                    developers {
+                        developer {
+                            id 'triniwiz'
+                            name 'Osei Fortune'
+                            email 'fortune.osei@yahoo.com'
+                        }
+                    }
+                }
             }
         }
     }
-}
 
-
-def properties = new Properties()
-properties.load(new FileInputStream(project.rootProject.file('local.properties')))
-
-bintray {
-    user = properties.getProperty("bintray.user")
-    key = properties.getProperty("bintray.apikey")
-    publications = ['release']
-    dryRun = false
-    publish = true
-    pkg {
-        repo = 'maven'
-        name = 'fancycamera'
-        description = "Fancy Android Camera"
-        publicDownloadNumbers = true
-        licenses = ['MIT']
-        issueTrackerUrl = 'https://github.com/triniwiz/fancycamera/issues'
-        vcsUrl = 'https://github.com/triniwiz/fancycamera'
-        version {
-            name = this.version
-            desc = "Version ${this.version}"
-            released = new Date()
-            vcsTag = this.version
-        }
+    signing {
+        sign configurations.archives
     }
 }
+
