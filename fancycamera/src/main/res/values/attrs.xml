@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <declare-styleable name="FancyCamera">
-        <attr name="enableFlash" format="boolean" />
-        <attr name="saveToGallery" format="boolean" />
-        <attr name="quality" format="enum">
+        <attr name="fcEnableFlash" format="boolean" />
+        <attr name="fcSaveToGallery" format="boolean" />
+        <attr name="fcQuality" format="enum">
             <enum name="max480p" value="0" />
             <enum name="max720p" value="1" />
             <enum name="max1080p" value="2" />
@@ -12,21 +12,21 @@
             <enum name="lowest" value="5" />
             <enum name="qvga" value="6" />
         </attr>
-        <attr name="cameraPosition" format="enum">
+        <attr name="fcCameraPosition" format="enum">
             <enum name="back" value="0" />
             <enum name="front" value="1" />
         </attr>
-        <attr name="cameraOrientation" format="enum">
+        <attr name="fcCameraOrientation" format="enum">
             <enum name="unknown" value="0" />
             <enum name="portrait" value="1" />
             <enum name="portraitUpsideDown" value="2" />
             <enum name="landscapeLeft" value="3" />
             <enum name="landscapeRight" value="4" />
         </attr>
-        <attr name="disableHEVC" format="boolean" />
-        <attr name="maxVideoBitrate" format="integer" />
-        <attr name="maxAudioBitRate" format="integer" />
-        <attr name="maxVideoFrameRate" format="integer" />
-        <attr name="audioLevels" format="boolean" />
+        <attr name="fcDisableHEVC" format="boolean" />
+        <attr name="fcMaxVideoBitrate" format="integer" />
+        <attr name="fcMaxAudioBitRate" format="integer" />
+        <attr name="fcMaxVideoFrameRate" format="integer" />
+        <attr name="fcAudioLevels" format="boolean" />
     </declare-styleable>
 </resources>
