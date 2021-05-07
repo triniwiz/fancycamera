@@ -17,7 +17,7 @@ task sourceJar(type: Jar) {
 
 group = "io.github.triniwiz"
 archivesBaseName = "fancycamera"
-version = "3.0.0-alpha21"
+version = "3.0.0-alpha22"
 afterEvaluate { project ->
     uploadArchives {
         repositories {
