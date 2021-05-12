@@ -15,9 +15,9 @@ task sourceJar(type: Jar) {
 }
 
 
-group = "io.github.triniwiz"
-archivesBaseName = "fancycamera"
-version = "3.0.0-alpha23"
+group = "io.github.triniwiz.fancycamera"
+archivesBaseName = "barcodeScanning"
+version = "1.0.0-alpha0"
 afterEvaluate { project ->
     uploadArchives {
         repositories {
@@ -33,9 +33,9 @@ afterEvaluate { project ->
                 }
 
                 pom.project {
-                    name "FancyCamera"
+                    name "FancyCameraBarcodeScanning"
                     packaging 'aar'
-                    description "Fancy Android Camera"
+                    description "Fancy Android Camera BarcodeScanning"
                     url 'https://github.com/triniwiz/fancycamera'
 
                     scm {

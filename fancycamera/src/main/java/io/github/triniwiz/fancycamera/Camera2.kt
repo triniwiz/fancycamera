@@ -128,7 +128,7 @@ class Camera2 @JvmOverloads constructor(
 
     private var previewView: PreviewView = PreviewView(context, attrs, defStyleAttr)
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handleBarcodeScanning(proxy: ImageProxy): Task<Boolean>? {
         if (!isBarcodeScanningSupported || !(detectorType == DetectorType.Barcode || detectorType == DetectorType.All)) {
             return null
@@ -161,7 +161,7 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handleFaceDetection(proxy: ImageProxy): Task<Boolean>? {
         if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
             return null
@@ -194,7 +194,7 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handleImageLabeling(proxy: ImageProxy): Task<Boolean>? {
         if (!isImageLabelingSupported || !(detectorType == DetectorType.Image || detectorType == DetectorType.All)) {
             return null
@@ -227,7 +227,7 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handleObjectDetection(proxy: ImageProxy): Task<Boolean>? {
         if (!isObjectDetectionSupported || !(detectorType == DetectorType.Object || detectorType == DetectorType.All)) {
             return null
@@ -260,7 +260,7 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handlePoseDetection(proxy: ImageProxy): Task<Boolean>? {
         if (!isPoseDetectionSupported || !(detectorType == DetectorType.Pose || detectorType == DetectorType.All)) {
             return null
@@ -292,7 +292,7 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun handleTextRecognition(proxy: ImageProxy): Task<Boolean>? {
         if (!isTextRecognitionSupported || !(detectorType == DetectorType.Text || detectorType == DetectorType.All)) {
             return null
@@ -371,7 +371,10 @@ class Camera2 @JvmOverloads constructor(
     override var maxVideoBitrate: Int = -1
     override var maxVideoFrameRate: Int = -1
     override var disableHEVC: Boolean = false
+
+
     override var detectorType: DetectorType = DetectorType.None
+        @SuppressLint("UnsafeOptInUsageError")
         set(value) {
             field = value
             if (!isRecording) {
@@ -510,7 +513,7 @@ class Camera2 @JvmOverloads constructor(
         set(value) {}
 
 
-    @SuppressLint("UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
                 .apply {
@@ -724,7 +727,7 @@ class Camera2 @JvmOverloads constructor(
     }
 
 
-    @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
+    @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun refreshCamera() {
         if (!hasCameraPermission()) return
         cachedPictureRatioSizeMap.clear()
@@ -783,6 +786,7 @@ class Camera2 @JvmOverloads constructor(
         isStarted = true
         listener?.onCameraOpen()
     }
+
 
 
     override fun startPreview() {
@@ -972,7 +976,7 @@ class Camera2 @JvmOverloads constructor(
         val df = SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
         val today = Calendar.getInstance().time
         val fileName = "PIC_" + df.format(today) + ".jpg"
-        if (saveToGallery && hasStoragePermission()) {
+        file = if (saveToGallery && hasStoragePermission()) {
             val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
             if (externalDir == null) {
                 listener?.onCameraError("Cannot save photo to gallery storage", Exception("Failed to get external directory"))
@@ -981,11 +985,11 @@ class Camera2 @JvmOverloads constructor(
                 if (!externalDir.exists()) {
                     externalDir.mkdirs()
                 }
-                file = File(externalDir, fileName)
+                File(externalDir, fileName)
             }
 
         } else {
-            file = File(context.getExternalFilesDir(null), fileName)
+            File(context.getExternalFilesDir(null), fileName)
         }
 
         cameraProvider?.let { provider ->
@@ -1215,7 +1219,7 @@ class Camera2 @JvmOverloads constructor(
     }
 
     override fun cameraRecording(): Boolean {
-        TODO("Not yet implemented")
+        return isRecording
     }
 
 
