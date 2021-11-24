@@ -28,7 +28,7 @@ import kotlin.math.log10
 
 @Suppress("DEPRECATION")
 class Camera @JvmOverloads constructor(
-        context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
+    context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : CameraBase(context, attrs, defStyleAttr) {
     var lock: Any = Any()
     var camera: Camera? = null
@@ -37,13 +37,22 @@ class Camera @JvmOverloads constructor(
     var isForceStopping = false
     var isStarted = false
     private fun handleZoom() {
-        synchronized(lock){
+        synchronized(lock) {
             if (camera != null) {
                 val params = camera!!.parameters
-                params.zoom = (zoom * 100 ).toInt()
+                params.zoom = (zoom * 100).toInt()
             }
         }
     }
+
+    override var pause: Boolean = false
+        set(value) {
+            if (value) {
+                stopPreview()
+            } else {
+                startPreview()
+            }
+        }
 
     override var zoom: Float = 0.0F
         set(value) {
@@ -108,13 +117,31 @@ class Camera @JvmOverloads constructor(
         if (!isBarcodeScanningSupported || !(detectorType == DetectorType.Barcode || detectorType == DetectorType.All)) {
             return null
         }
-        val BarcodeScannerClazz = Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
+        val BarcodeScannerClazz =
+            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
         val barcodeScanner = BarcodeScannerClazz.newInstance()
-        val BarcodeScannerOptionsClazz = Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
-        val processImageMethod = BarcodeScannerClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java, BarcodeScannerOptionsClazz)
+        val BarcodeScannerOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
+        val processImageMethod = BarcodeScannerClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            BarcodeScannerOptionsClazz
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(barcodeScanner, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21, barcodeScannerOptions!!) as Task<String>
+        val task = processImageMethod.invoke(
+            barcodeScanner,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21,
+            barcodeScannerOptions!!
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 mainHandler.post {
@@ -123,8 +150,10 @@ class Camera @JvmOverloads constructor(
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
             mainHandler.post {
-                onBarcodeScanningListener?.onError(it.message
-                        ?: "Failed to complete face detection.", it)
+                onBarcodeScanningListener?.onError(
+                    it.message
+                        ?: "Failed to complete face detection.", it
+                )
             }
         }).addOnCompleteListener(imageAnalysisExecutor, {
             returnTask.setResult(true)
@@ -136,20 +165,40 @@ class Camera @JvmOverloads constructor(
         if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
             return null
         }
-        val FaceDetectionClazz = Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection")
+        val FaceDetectionClazz =
+            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection")
         val faceDetection = FaceDetectionClazz.newInstance()
-        val FaceDetectionOptionsClazz = Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
-        val processBytesMethod = FaceDetectionClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java, FaceDetectionOptionsClazz)
+        val FaceDetectionOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
+        val processBytesMethod = FaceDetectionClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            FaceDetectionOptionsClazz
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(faceDetection, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21, faceDetectionOptions!!) as Task<String>
+        val task = processBytesMethod.invoke(
+            faceDetection,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21,
+            faceDetectionOptions!!
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 onFacesDetectedListener?.onSuccess(it)
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
-            onFacesDetectedListener?.onError(it.message
-                    ?: "Failed to complete face detection.", it)
+            onFacesDetectedListener?.onError(
+                it.message
+                    ?: "Failed to complete face detection.", it
+            )
         }).addOnCompleteListener {
             returnTask.setResult(true)
         }
@@ -160,20 +209,40 @@ class Camera @JvmOverloads constructor(
         if (!isImageLabelingSupported || !(detectorType == DetectorType.Image || detectorType == DetectorType.All)) {
             return null
         }
-        val ImageLabelingClazz = Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
+        val ImageLabelingClazz =
+            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
         val imageLabeling = ImageLabelingClazz.newInstance()
-        val ImageLabelingOptionsClazz = Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
-        val processBytesMethod = ImageLabelingClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java, ImageLabelingOptionsClazz)
+        val ImageLabelingOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
+        val processBytesMethod = ImageLabelingClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            ImageLabelingOptionsClazz
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(imageLabeling, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21, imageLabelingOptions!!) as Task<String>
+        val task = processBytesMethod.invoke(
+            imageLabeling,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21,
+            imageLabelingOptions!!
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 onImageLabelingListener?.onSuccess(it)
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
-            onImageLabelingListener?.onError(it.message
-                    ?: "Failed to complete face detection.", it)
+            onImageLabelingListener?.onError(
+                it.message
+                    ?: "Failed to complete face detection.", it
+            )
         }).addOnCompleteListener {
             returnTask.setResult(true)
         }
@@ -184,20 +253,40 @@ class Camera @JvmOverloads constructor(
         if (!isObjectDetectionSupported || !(detectorType == DetectorType.Object || detectorType == DetectorType.All)) {
             return null
         }
-        val ObjectDetectionClazz = Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection")
+        val ObjectDetectionClazz =
+            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection")
         val objectDetection = ObjectDetectionClazz.newInstance()
-        val ObjectDetectionOptionsClazz = Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
-        val processBytesMethod = ObjectDetectionClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java, ObjectDetectionOptionsClazz)
+        val ObjectDetectionOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
+        val processBytesMethod = ObjectDetectionClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            ObjectDetectionOptionsClazz
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(objectDetection, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21, objectDetectionOptions!!) as Task<String>
+        val task = processBytesMethod.invoke(
+            objectDetection,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21,
+            objectDetectionOptions!!
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 onObjectDetectedListener?.onSuccess(it)
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
-            onObjectDetectedListener?.onError(it.message
-                    ?: "Failed to complete face detection.", it)
+            onObjectDetectedListener?.onError(
+                it.message
+                    ?: "Failed to complete face detection.", it
+            )
         }).addOnCompleteListener {
             returnTask.setResult(true)
         }
@@ -208,19 +297,36 @@ class Camera @JvmOverloads constructor(
         if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
             return null
         }
-        val PoseDetectionClazz = Class.forName("io.github.triniwiz.fancycamera.posedetection.PoseDetection")
+        val PoseDetectionClazz =
+            Class.forName("io.github.triniwiz.fancycamera.posedetection.PoseDetection")
         val poseDetection = PoseDetectionClazz.newInstance()
-        val processBytesMethod = PoseDetectionClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java)
+        val processBytesMethod = PoseDetectionClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(poseDetection, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21) as Task<String>
+        val task = processBytesMethod.invoke(
+            poseDetection,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 onPoseDetectedListener?.onSuccess(it)
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
-            onPoseDetectedListener?.onError(it.message
-                    ?: "Failed to complete face detection.", it)
+            onPoseDetectedListener?.onError(
+                it.message
+                    ?: "Failed to complete face detection.", it
+            )
         }).addOnCompleteListener {
             returnTask.setResult(true)
         }
@@ -231,12 +337,27 @@ class Camera @JvmOverloads constructor(
         if (!isTextRecognitionSupported || !(detectorType == DetectorType.Text || detectorType == DetectorType.All)) {
             return null
         }
-        val TextRecognitionClazz = Class.forName("io.github.triniwiz.fancycamera.textrecognition.TextRecognition")
+        val TextRecognitionClazz =
+            Class.forName("io.github.triniwiz.fancycamera.textrecognition.TextRecognition")
         val textRecognition = TextRecognitionClazz.newInstance()
-        val processBytesMethod = TextRecognitionClazz.getDeclaredMethod("processBytes", ByteArray::class.java, Int::class.java, Int::class.java, Int::class.java, Int::class.java)
+        val processBytesMethod = TextRecognitionClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java
+        )
         val previewSize = camera.parameters.previewSize
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(textRecognition, data, previewSize.width, previewSize.height, rotationAngle, ImageFormat.NV21) as Task<String>
+        val task = processBytesMethod.invoke(
+            textRecognition,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21
+        ) as Task<String>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it.isNotEmpty()) {
                 mainHandler.post {
@@ -245,8 +366,10 @@ class Camera @JvmOverloads constructor(
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
             mainHandler.post {
-                onTextRecognitionListener?.onError(it.message
-                        ?: "Failed to complete text recognition.", it)
+                onTextRecognitionListener?.onError(
+                    it.message
+                        ?: "Failed to complete text recognition.", it
+                )
             }
         }).addOnCompleteListener {
             returnTask.setResult(true)
@@ -258,7 +381,11 @@ class Camera @JvmOverloads constructor(
         addView(previewView)
         detectSupport()
         previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-            override fun onSurfaceTextureAvailable(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureAvailable(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
                 cameraExecutor.execute {
                     initCamera()
                     mainHandler.post {
@@ -267,7 +394,11 @@ class Camera @JvmOverloads constructor(
                 }
             }
 
-            override fun onSurfaceTextureSizeChanged(surface: SurfaceTexture, width: Int, height: Int) {
+            override fun onSurfaceTextureSizeChanged(
+                surface: SurfaceTexture,
+                width: Int,
+                height: Int
+            ) {
 
             }
 
@@ -284,13 +415,18 @@ class Camera @JvmOverloads constructor(
 
     override var flashMode: CameraFlashMode = CameraFlashMode.OFF
         set(value) {
-            synchronized(lock){
+            synchronized(lock) {
                 when (value) {
-                    CameraFlashMode.OFF -> camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_OFF
-                    CameraFlashMode.ON -> camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_ON
-                    CameraFlashMode.AUTO -> camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_AUTO
-                    CameraFlashMode.RED_EYE -> camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_RED_EYE
-                    CameraFlashMode.TORCH -> camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_TORCH
+                    CameraFlashMode.OFF -> camera?.parameters?.flashMode =
+                        Camera.Parameters.FLASH_MODE_OFF
+                    CameraFlashMode.ON -> camera?.parameters?.flashMode =
+                        Camera.Parameters.FLASH_MODE_ON
+                    CameraFlashMode.AUTO -> camera?.parameters?.flashMode =
+                        Camera.Parameters.FLASH_MODE_AUTO
+                    CameraFlashMode.RED_EYE -> camera?.parameters?.flashMode =
+                        Camera.Parameters.FLASH_MODE_RED_EYE
+                    CameraFlashMode.TORCH -> camera?.parameters?.flashMode =
+                        Camera.Parameters.FLASH_MODE_TORCH
                 }
                 field = value
             }
@@ -330,9 +466,9 @@ class Camera @JvmOverloads constructor(
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
     override fun hasFlash(): Boolean {
-        return synchronized(lock){
+        return synchronized(lock) {
             camera?.parameters?.supportedFlashModes?.contains(Camera.Parameters.FLASH_MODE_ON)
-                    ?: false
+                ?: false
         }
     }
 
@@ -544,7 +680,14 @@ class Camera @JvmOverloads constructor(
                             Tasks.whenAllComplete(tasks).addOnCompleteListener {
                                 try {
                                     val size = camera.parameters.previewSize
-                                    camera.addCallbackBuffer(createPreviewBuffer(Size(size.width, size.height)))
+                                    camera.addCallbackBuffer(
+                                        createPreviewBuffer(
+                                            Size(
+                                                size.width,
+                                                size.height
+                                            )
+                                        )
+                                    )
                                 } catch (e: java.lang.Exception) {
                                 }
                             }
@@ -562,6 +705,9 @@ class Camera @JvmOverloads constructor(
     }
 
     private fun startPreviewInternal() {
+        if(pause){
+            return
+        }
         if (camera != null) {
             camera?.startPreview()
         } else {
@@ -614,7 +760,10 @@ class Camera @JvmOverloads constructor(
             file = if (saveToGallery && hasStoragePermission()) {
                 val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
                 if (externalDir == null) {
-                    listener?.onCameraError("Cannot save photo to gallery storage", java.lang.Exception("Failed to get external directory"))
+                    listener?.onCameraError(
+                        "Cannot save photo to gallery storage",
+                        java.lang.Exception("Failed to get external directory")
+                    )
                     return
                 } else {
                     if (!externalDir.exists()) {
@@ -654,8 +803,8 @@ class Camera @JvmOverloads constructor(
                             val matrix = Matrix()
                             val tmpExif = ExifInterface(tmpFile)
                             var orientation = tmpExif.getAttributeInt(
-                                    ExifInterface.TAG_ORIENTATION,
-                                    ExifInterface.ORIENTATION_UNDEFINED
+                                ExifInterface.TAG_ORIENTATION,
+                                ExifInterface.ORIENTATION_UNDEFINED
                             )
 
                             val info = Camera.CameraInfo()
@@ -695,14 +844,27 @@ class Camera @JvmOverloads constructor(
                                 8 -> matrix.postRotate(270f)
                             }
 
-                            bm = Bitmap.createBitmap(bm, offsetWidth, offsetHeight, originalWidth, originalHeight, matrix, false)
+                            bm = Bitmap.createBitmap(
+                                bm,
+                                offsetWidth,
+                                offsetHeight,
+                                originalWidth,
+                                originalHeight,
+                                matrix,
+                                false
+                            )
 
 
                             var override: Bitmap? = null
                             if (overridePhotoHeight > 0 && overridePhotoWidth > 0) {
-                                override = Bitmap.createScaledBitmap(bm, overridePhotoWidth, originalHeight, false)
+                                override = Bitmap.createScaledBitmap(
+                                    bm,
+                                    overridePhotoWidth,
+                                    originalHeight,
+                                    false
+                                )
                                 override.compress(Bitmap.CompressFormat.JPEG, 92, fos)
-                            }else {
+                            } else {
                                 bm.compress(Bitmap.CompressFormat.JPEG, 92, fos)
                             }
 
@@ -740,15 +902,27 @@ class Camera @JvmOverloads constructor(
                                 put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
                                 put(MediaStore.MediaColumns.MIME_TYPE, "image/*")
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                                    put(
+                                        MediaStore.MediaColumns.RELATIVE_PATH,
+                                        Environment.DIRECTORY_DCIM
+                                    )
                                     put(MediaStore.MediaColumns.IS_PENDING, 1)
-                                    put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                                    put(
+                                        MediaStore.Images.Media.DATE_TAKEN,
+                                        System.currentTimeMillis()
+                                    )
                                 }
                             }
 
-                            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                            val uri = context.contentResolver.insert(
+                                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                                values
+                            )
                             if (uri == null) {
-                                listener?.onCameraError("Failed to add photo to gallery", java.lang.Exception("Failed to create uri"))
+                                listener?.onCameraError(
+                                    "Failed to add photo to gallery",
+                                    java.lang.Exception("Failed to create uri")
+                                )
                                 startPreview()
                                 synchronized(lock) {
                                     isTakingPhoto = false
@@ -818,8 +992,14 @@ class Camera @JvmOverloads constructor(
                 recorder.setOnErrorListener { mr, what, extra ->
                     if (listener != null) {
                         when (what) {
-                            MediaRecorder.MEDIA_ERROR_SERVER_DIED -> listener?.onCameraError("Server died", java.lang.Exception("Server died"))
-                            MediaRecorder.MEDIA_RECORDER_ERROR_UNKNOWN -> listener?.onCameraError("Unknown", java.lang.Exception("Unknown"))
+                            MediaRecorder.MEDIA_ERROR_SERVER_DIED -> listener?.onCameraError(
+                                "Server died",
+                                java.lang.Exception("Server died")
+                            )
+                            MediaRecorder.MEDIA_RECORDER_ERROR_UNKNOWN -> listener?.onCameraError(
+                                "Unknown",
+                                java.lang.Exception("Unknown")
+                            )
                         }
                     }
                 }
@@ -831,7 +1011,10 @@ class Camera @JvmOverloads constructor(
                 file = if (saveToGallery && hasStoragePermission()) {
                     val externalDir = context.getExternalFilesDir(Environment.DIRECTORY_DCIM)
                     if (externalDir == null) {
-                        listener?.onCameraError("Cannot save video to gallery storage", java.lang.Exception("Failed to get external directory"))
+                        listener?.onCameraError(
+                            "Cannot save video to gallery storage",
+                            java.lang.Exception("Failed to get external directory")
+                        )
                         return
                     } else {
                         if (!externalDir.exists()) {
@@ -865,13 +1048,23 @@ class Camera @JvmOverloads constructor(
                         maxAudioBitRate = this.maxAudioBitRate
                     }
                     recorder.setVideoFrameRate(Math.min(profile.videoFrameRate, maxVideoFrameRate))
-                    recorder.setVideoEncodingBitRate(Math.min(profile.videoBitRate, maxVideoBitrate))
-                    recorder.setAudioEncodingBitRate(Math.min(profile.audioBitRate, maxAudioBitRate))
+                    recorder.setVideoEncodingBitRate(
+                        Math.min(
+                            profile.videoBitRate,
+                            maxVideoBitrate
+                        )
+                    )
+                    recorder.setAudioEncodingBitRate(
+                        Math.min(
+                            profile.audioBitRate,
+                            maxAudioBitRate
+                        )
+                    )
                     recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
                     recorder.setAudioEncoder(profile.audioCodec)
                     recorder.setOutputFile(file!!.path)
                     recorder.prepare()
-                    if (flashMode == CameraFlashMode.ON){
+                    if (flashMode == CameraFlashMode.ON) {
                         camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_TORCH
                     }
                     recorder.start()
@@ -895,7 +1088,7 @@ class Camera @JvmOverloads constructor(
                     return@execute
                 }
                 try {
-                    if (flashMode == CameraFlashMode.ON){
+                    if (flashMode == CameraFlashMode.ON) {
                         camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_ON
                     }
                     recorder.stop()
@@ -912,15 +1105,24 @@ class Camera @JvmOverloads constructor(
                             put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis())
                             put(MediaStore.MediaColumns.MIME_TYPE, "video/*")
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM)
+                                put(
+                                    MediaStore.MediaColumns.RELATIVE_PATH,
+                                    Environment.DIRECTORY_DCIM
+                                )
                                 put(MediaStore.MediaColumns.IS_PENDING, 1)
                                 put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
                             }
                         }
 
-                        val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                        val uri = context.contentResolver.insert(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            values
+                        )
                         if (uri == null) {
-                            listener?.onCameraError("Failed to add video to gallery", java.lang.Exception("Failed to create uri"))
+                            listener?.onCameraError(
+                                "Failed to add video to gallery",
+                                java.lang.Exception("Failed to create uri")
+                            )
                         } else {
                             val fos = context.contentResolver.openOutputStream(uri)
                             val fis = FileInputStream(file!!)
@@ -1056,13 +1258,15 @@ class Camera @JvmOverloads constructor(
         }
 
     private var rotationAngle = 0
-    private fun updateCameraDisplayOrientation(activity: Activity,
-                                               cameraId: Int, camera: Camera?) {
+    private fun updateCameraDisplayOrientation(
+        activity: Activity,
+        cameraId: Int, camera: Camera?
+    ) {
         synchronized(lock) {
             val info = Camera.CameraInfo()
             Camera.getCameraInfo(cameraId, info)
             val rotation = activity.windowManager.defaultDisplay
-                    .rotation
+                .rotation
             var degrees = 0
             when (rotation) {
                 Surface.ROTATION_0 -> degrees = 0

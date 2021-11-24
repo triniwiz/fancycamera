@@ -21,7 +21,8 @@ import android.widget.FrameLayout
 @SuppressLint("RestrictedApi")
 class FancyCamera : FrameLayout {
     private val VIDEO_RECORDER_PERMISSIONS_REQUEST = 868
-    private val VIDEO_RECORDER_PERMISSIONS = arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
+    private val VIDEO_RECORDER_PERMISSIONS =
+        arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA)
     private var mFlashEnabled = false
     private val mLock = Any()
     private var listener: CameraEventListener? = null
@@ -30,6 +31,20 @@ class FancyCamera : FrameLayout {
     private var isGettingAudioLvls = false
     private var mEMA = 0.0
     private lateinit var cameraView: CameraBase
+
+
+    var pause: Boolean
+        get() {
+            return cameraView.pause
+        }
+        set(value) {
+            if (value) {
+                cameraView.stopPreview()
+            } else {
+                cameraView.startPreview()
+            }
+        }
+
     var zoom: Float
         get() {
             return cameraView.zoom
@@ -312,7 +327,7 @@ class FancyCamera : FrameLayout {
         cameraView.toggleCamera()
     }
 
-    fun toggleFlash(){
+    fun toggleFlash() {
         cameraView.toggleFlash()
     }
 

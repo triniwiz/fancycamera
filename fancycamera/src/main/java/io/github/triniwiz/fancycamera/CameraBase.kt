@@ -24,6 +24,7 @@ import java.util.concurrent.Executors
 abstract class CameraBase @JvmOverloads constructor(
         context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    abstract var pause: Boolean
     abstract var whiteBalance: WhiteBalance
     abstract var position: CameraPosition
     abstract var rotation: CameraOrientation
