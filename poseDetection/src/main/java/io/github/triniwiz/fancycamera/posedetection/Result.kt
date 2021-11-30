@@ -68,7 +68,7 @@ class Result(pose: Pose) {
             LeftEyeInner("leftEyeInner"),
             LeftEye("leftEye"),
             LeftEyeOuter("leftEyeOuter"),
-            RightEyeInner("RightEyeInner"),
+            RightEyeInner("rightEyeInner"),
             RightEye("leftEye"),
             RightEyeOuter("leftEyeOuter"),
             LeftEar("leftEar"),

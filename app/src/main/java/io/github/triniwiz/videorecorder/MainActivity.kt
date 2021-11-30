@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // FancyCamera.forceV1 = true
+        //FancyCamera.forceV1 = true
         setContentView(R.layout.activity_main)
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
@@ -51,7 +51,10 @@ class MainActivity : AppCompatActivity() {
 
                 Log.d("com.fitcom.test", " support " + cameraView.getSupportedRatios.toList())
 
-                Log.d("com.fitcom.test", " support " + cameraView.getAvailablePictureSizes("4:3").toList())
+                Log.d(
+                    "com.fitcom.test",
+                    " support " + cameraView.getAvailablePictureSizes("4:3").toList()
+                )
             }
 
             override fun onCameraCloseUI() {
@@ -90,9 +93,9 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.None // disable to use recorder
+        cameraView.detectorType = DetectorType.Selfie // disable to use recorder
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnBarcodeScanningListener: Success $result")
             }
 
@@ -102,7 +105,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.setOnFacesDetectedListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnFacesDetectedListener: Success ${result}")
             }
 
@@ -112,7 +115,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.setOnImageLabelingListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnImageLabelingListener: Success ${result}")
             }
 
@@ -122,7 +125,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.setOnObjectDetectedListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnObjectDetectedListener: Success ${result}")
             }
 
@@ -132,7 +135,7 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.setOnPoseDetectedListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnPoseDetectedListener: Success $result")
             }
 
@@ -142,12 +145,22 @@ class MainActivity : AppCompatActivity() {
             }
         })
         cameraView.setOnTextRecognitionListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnTextRecognitionListener: Success $result")
             }
 
             override fun onError(message: String, exception: Exception) {
                 println("setOnTextRecognitionListener: Error $message")
+                exception.printStackTrace()
+            }
+        })
+        cameraView.setOnSelfieSegmentationListener(object : ImageAnalysisCallback {
+            override fun onSuccess(result: Any) {
+                println("setOnSelfieSegmentationListener: Success $result")
+            }
+
+            override fun onError(message: String, exception: Exception) {
+                println("setOnSelfieSegmentationListener: Error $message")
                 exception.printStackTrace()
             }
         })
@@ -215,11 +228,15 @@ class MainActivity : AppCompatActivity() {
         if (!cameraView.hasPermission()) {
             cameraView.requestPermission()
         } else {
-           cameraView.startPreview()
+            cameraView.startPreview()
         }
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         cameraView.onPermissionHandler(requestCode, permissions as Array<String>, grantResults)
     }

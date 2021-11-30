@@ -10,6 +10,7 @@ import java.util.concurrent.Executors
 
 class FaceDetection() {
     private var executor: ExecutorService = Executors.newSingleThreadExecutor()
+
     fun processImage(image: InputImage, options: Options): Task<String> {
         val task = TaskCompletionSource<String>()
         val opts = FaceDetectorOptions.Builder()

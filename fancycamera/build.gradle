@@ -29,9 +29,9 @@ android {
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation "com.google.android.gms:play-services-tasks:17.2.1"
-    api "androidx.appcompat:appcompat:1.4.0"
+    api "androidx.appcompat:appcompat:$app_compat_version"
     //noinspection KtxExtensionAvailable
-    api "androidx.core:core:1.7.0"
+    api "androidx.core:core:1.6.0"
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.4.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'

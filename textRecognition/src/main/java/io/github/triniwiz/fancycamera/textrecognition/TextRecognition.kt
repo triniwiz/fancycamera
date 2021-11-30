@@ -5,13 +5,15 @@ import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+
 import java.util.concurrent.Executors
 
 class TextRecognition {
     private val executor = Executors.newSingleThreadExecutor()
     fun processImage(image: InputImage): Task<String> {
         val task = TaskCompletionSource<String>()
-        val client = com.google.mlkit.vision.text.TextRecognition.getClient()
+        val client = com.google.mlkit.vision.text.TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         val gson = Gson()
         client.process(image)
                 .addOnSuccessListener(executor, {

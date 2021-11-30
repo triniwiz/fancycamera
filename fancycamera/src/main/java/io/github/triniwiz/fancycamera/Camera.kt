@@ -377,6 +377,50 @@ class Camera @JvmOverloads constructor(
         return returnTask.task
     }
 
+    private fun handleSelfieSegmentation(data: ByteArray, camera: Camera): Task<Boolean>? {
+        if (!isSelfieSegmentationSupported || !(detectorType == DetectorType.Selfie || detectorType == DetectorType.All)) {
+            return null
+        }
+        val SelfieSegmentationClazz =
+            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation")
+        val selfieSegmentation = SelfieSegmentationClazz.newInstance()
+        val SelfieSegmentationOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
+        val processBytesMethod = SelfieSegmentationClazz.getDeclaredMethod(
+            "processBytes",
+            ByteArray::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            Int::class.java,
+            SelfieSegmentationOptionsClazz
+        )
+        val previewSize = camera.parameters.previewSize
+        val returnTask = TaskCompletionSource<Boolean>()
+        val task = processBytesMethod.invoke(
+            selfieSegmentation,
+            data,
+            previewSize.width,
+            previewSize.height,
+            rotationAngle,
+            ImageFormat.NV21,
+            selfieSegmentationOptions!!
+        ) as Task<String>
+        task.addOnSuccessListener(imageAnalysisExecutor, {
+            if (it.isNotEmpty()) {
+                onImageLabelingListener?.onSuccess(it)
+            }
+        }).addOnFailureListener(imageAnalysisExecutor, {
+            onImageLabelingListener?.onError(
+                it.message
+                    ?: "Failed to complete face detection.", it
+            )
+        }).addOnCompleteListener {
+            returnTask.setResult(true)
+        }
+        return returnTask.task
+    }
+
     init {
         addView(previewView)
         detectSupport()
@@ -676,6 +720,13 @@ class Camera @JvmOverloads constructor(
                         if (textTask != null) {
                             tasks.add(textTask)
                         }
+
+                        // SelfieSegmentation
+                        val selfieTask = handleSelfieSegmentation(data, camera)
+                        if (selfieTask != null) {
+                            tasks.add(selfieTask)
+                        }
+
                         if (tasks.isNotEmpty()) {
                             Tasks.whenAllComplete(tasks).addOnCompleteListener {
                                 try {
@@ -705,7 +756,7 @@ class Camera @JvmOverloads constructor(
     }
 
     private fun startPreviewInternal() {
-        if(pause){
+        if (pause) {
             return
         }
         if (camera != null) {

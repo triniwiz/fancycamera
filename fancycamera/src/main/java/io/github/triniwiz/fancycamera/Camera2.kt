@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
+import android.util.Log
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -396,6 +397,52 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
+    @SuppressLint("UnsafeOptInUsageError")
+    private fun handleSelfieSegmentation(proxy: ImageProxy): Task<Boolean>? {
+        if (!isSelfieSegmentationSupported || !(detectorType == DetectorType.Selfie || detectorType == DetectorType.All)) {
+            return null
+        }
+        val image = proxy.image ?: return null
+        val rotationAngle = proxy.imageInfo.rotationDegrees
+        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
+        val SelfieSegmentationClazz =
+            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation")
+        val selfieSegmentation = SelfieSegmentationClazz.newInstance()
+        val fromMediaImage =
+            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
+        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
+
+        val SelfieSegmentationOptionsClazz =
+            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
+
+        val processImageMethod = SelfieSegmentationClazz.getDeclaredMethod(
+            "processImage",
+            InputImageClazz,
+            SelfieSegmentationOptionsClazz
+        )
+
+        val returnTask = TaskCompletionSource<Boolean>()
+        val task = processImageMethod.invoke(selfieSegmentation, inputImage, selfieSegmentationOptions) as Task<Any>
+        task.addOnSuccessListener(imageAnalysisExecutor, {
+            if (it != null) {
+                mainHandler.post {
+                    onTextRecognitionListener?.onSuccess(it)
+                }
+            }
+        }).addOnFailureListener(imageAnalysisExecutor, {
+            mainHandler.post {
+                onTextRecognitionListener?.onError(
+                    it.message
+                        ?: "Failed to complete text recognition.", it
+                )
+            }
+        }).addOnCompleteListener(imageAnalysisExecutor, {
+            returnTask.setResult(true)
+        })
+        return returnTask.task
+    }
+
+
     init {
         previewView.afterMeasured {
             if (autoFocus) {
@@ -642,6 +689,12 @@ class Camera2 @JvmOverloads constructor(
                 val textTask = handleTextRecognition(it)
                 if (textTask != null) {
                     tasks.add(textTask)
+                }
+
+                // SelfieSegmentation
+                val selfieTask = handleSelfieSegmentation(it)
+                if (selfieTask != null) {
+                    tasks.add(selfieTask)
                 }
 
                 if (tasks.isNotEmpty()) {

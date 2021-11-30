@@ -60,7 +60,7 @@ class Photo : AppCompatActivity() {
         })
         cameraView.detectorType = DetectorType.Face
         cameraView.setOnFacesDetectedListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnFacesDetectedListener: Success ${result}")
             }
 
@@ -70,7 +70,7 @@ class Photo : AppCompatActivity() {
             }
         })
         cameraView.setOnTextRecognitionListener(object : ImageAnalysisCallback {
-            override fun onSuccess(result: String) {
+            override fun onSuccess(result: Any) {
                 println("setOnTextRecognitionListener: Success ${result}")
             }
 

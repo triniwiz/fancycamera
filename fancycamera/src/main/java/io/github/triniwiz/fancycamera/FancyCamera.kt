@@ -225,6 +225,10 @@ class FancyCamera : FrameLayout {
         cameraView.setOnTextRecognitionListener(callback)
     }
 
+    fun setOnSelfieSegmentationListener(callback: ImageAnalysisCallback?) {
+        cameraView.setOnSelfieSegmentationListener(callback)
+    }
+
     var overridePhotoWidth: Int
         set(value) {
             cameraView.overridePhotoWidth = value
