@@ -93,7 +93,7 @@ class BarcodeScanner {
         companion object {
             internal fun fromBarcode(format: Int): BarcodeFormat? {
                 var bf: BarcodeFormat? = null
-                for (code in BarcodeFormat.values()) {
+                for (code in values()) {
                     if (code.format == format) {
                         bf = code
                         break
