@@ -297,7 +297,7 @@ class ML {
 
                     if (tasks.isNotEmpty()) {
                         Tasks.whenAllComplete(tasks).addOnCompleteListener {
-                            callback.onSuccess(results.toTypedArray())
+                            callback.onSuccess(results)
                         }
                     }
                 }

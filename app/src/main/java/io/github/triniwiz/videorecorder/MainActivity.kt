@@ -208,7 +208,7 @@ class MainActivity : AppCompatActivity() {
                 json.put("barcodeScanning", barcode)
                 ML.processImage(bm, 0, json.toString(), object : ImageAnalysisCallback {
                     override fun onSuccess(result: Any) {
-                        (result as? Array<Array<Any>>)?.let { values ->
+                        (result as? List<Array<Any>>)?.let { values ->
                             for (value in values) {
                                 val type = value[0]
                                 val data = value[1]
