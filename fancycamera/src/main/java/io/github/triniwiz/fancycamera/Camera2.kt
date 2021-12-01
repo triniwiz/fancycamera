@@ -430,12 +430,12 @@ class Camera2 @JvmOverloads constructor(
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it != null) {
                 mainHandler.post {
-                    onTextRecognitionListener?.onSuccess(it)
+                    onSelfieSegmentationListener?.onSuccess(it)
                 }
             }
         }).addOnFailureListener(imageAnalysisExecutor, {
             mainHandler.post {
-                onTextRecognitionListener?.onError(
+                onSelfieSegmentationListener?.onError(
                     it.message
                         ?: "Failed to complete text recognition.", it
                 )
