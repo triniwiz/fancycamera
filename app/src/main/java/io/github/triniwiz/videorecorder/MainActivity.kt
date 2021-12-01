@@ -1,6 +1,7 @@
 package io.github.triniwiz.videorecorder
 
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 
@@ -12,11 +13,18 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.VideoView
 import io.github.triniwiz.fancycamera.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.lang.Exception
+import java.net.URL
 
 import java.util.Timer
 import java.util.TimerTask
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     internal lateinit var container: RelativeLayout
@@ -27,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     internal var timerTask: TimerTask? = null
     internal var levelsTask: Timer? = null
     internal var level = 0.0
+    var executor: ExecutorService = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -93,7 +102,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.Selfie // disable to use recorder
+        cameraView.detectorType = DetectorType.None // disable to use recorder
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnBarcodeScanningListener: Success $result")
@@ -166,6 +175,54 @@ class MainActivity : AppCompatActivity() {
         })
         cameraView.saveToGallery = true
         container.addView(cameraView)
+        processBarcodeBitmap()
+
+    }
+
+    fun processBarcodeBitmap() {
+        executor.execute {
+            try {
+                val barcodeFile = File(filesDir, "barcodes.png")
+                if (barcodeFile.exists()) {
+                    barcodeFile.delete()
+                }
+
+                val url =
+                    URL("https://www.jqueryscript.net/images/jQuery-Plugin-To-Generate-International-Article-Number-Barcode-EAN13.jpg")
+                val fs = FileOutputStream(barcodeFile)
+                url.openStream().use { input ->
+                    fs.use { output ->
+                        input.copyTo(output)
+                        input.close()
+                    }
+                    fs.close()
+                }
+
+                val bm = BitmapFactory.decodeFile(barcodeFile.absolutePath)
+                val json = JSONObject()
+                json.put("detectorType", 0)
+                val barcode = JSONObject()
+                val formats = JSONArray()
+                formats.put(0)
+                barcode.put("barcodeFormat", formats)
+                json.put("barcodeScanning", barcode)
+                ML.processImage(bm, 0, json.toString(), object : ImageAnalysisCallback {
+                    override fun onSuccess(result: Any) {
+                        (result as? Array<Array<Any>>)?.let { values ->
+                            for (value in values) {
+                                val type = value[0]
+                                val data = value[1]
+                                Log.d("com.test", "barcode processImage $type:  $data")
+                            }
+                        }
+                    }
+
+                    override fun onError(message: String, exception: Exception) {}
+                })
+            } catch (e: IOException) {
+                e.printStackTrace()
+            }
+        }
     }
 
     fun startRecording(view: View) {

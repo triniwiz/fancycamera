@@ -11,7 +11,6 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
-import android.util.Log
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -68,6 +67,7 @@ class Camera2 @JvmOverloads constructor(
             } else {
                 startPreview()
             }
+            field = value
         }
 
     private fun handleZoom() {
@@ -241,7 +241,7 @@ class Camera2 @JvmOverloads constructor(
         val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
         val ImageLabelingClazz =
             Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
-        val faceDetection = ImageLabelingClazz.newInstance()
+        val imageLabeling = ImageLabelingClazz.newInstance()
         val fromMediaImage =
             InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
         val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
@@ -254,7 +254,7 @@ class Camera2 @JvmOverloads constructor(
         )
         val returnTask = TaskCompletionSource<Boolean>()
         val task = processImageMethod.invoke(
-            faceDetection,
+            imageLabeling,
             inputImage,
             imageLabelingOptions!!
         ) as Task<String>
@@ -422,7 +422,11 @@ class Camera2 @JvmOverloads constructor(
         )
 
         val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(selfieSegmentation, inputImage, selfieSegmentationOptions) as Task<Any>
+        val task = processImageMethod.invoke(
+            selfieSegmentation,
+            inputImage,
+            selfieSegmentationOptions
+        ) as Task<Any>
         task.addOnSuccessListener(imageAnalysisExecutor, {
             if (it != null) {
                 mainHandler.post {

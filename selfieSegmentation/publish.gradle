@@ -10,9 +10,9 @@ allprojects {
     }
 
     plugins.withId("com.vanniktech.maven.base") {
-        group = "io.github.triniwiz"
-        archivesBaseName = "fancycamera"
-        version = "3.0.0-alpha.29"
+        group = "io.github.triniwiz.fancycamera"
+        archivesBaseName = "selfieSegmentation"
+        version = "1.0.0-alpha.0"
 
         mavenPublishing {
             publishToMavenCentral("DEFAULT")
@@ -22,9 +22,9 @@ allprojects {
             signAllPublications()
 
             pom {
-                name = "FancyCamera"
+                name = "FancyCameraSelfieSegmentation"
                 packaging = 'aar'
-                description = "Fancy Android Camera"
+                description = "Fancy Android Camera SelfieSegmentation"
                 inceptionYear = "2019"
                 url  = 'https://github.com/triniwiz/fancycamera'
 
@@ -56,3 +56,6 @@ allprojects {
         }
     }
 }
+
+
+

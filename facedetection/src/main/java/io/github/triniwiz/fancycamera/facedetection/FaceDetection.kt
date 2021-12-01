@@ -5,6 +5,7 @@ import com.google.android.gms.tasks.*
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -25,28 +26,35 @@ class FaceDetection() {
         val client = com.google.mlkit.vision.face.FaceDetection.getClient(opts.build())
         val gson = Gson()
         client.process(image)
-                .addOnSuccessListener(executor, {
-                    val result = mutableListOf<String>()
-                    for (face in it) {
-                        val json = gson.toJson(Result(face))
-                        result.add(json)
-                    }
+            .addOnSuccessListener(executor, {
+                val result = mutableListOf<String>()
+                for (face in it) {
+                    val json = gson.toJson(Result(face))
+                    result.add(json)
+                }
 
-                    val json = if (result.isNotEmpty()) {
-                        gson.toJson(result)
-                    } else {
-                        ""
-                    }
-                    client.close()
-                    task.setResult(json)
-                })
-                .addOnFailureListener(executor, {
-                    task.setException(it)
-                })
+                val json = if (result.isNotEmpty()) {
+                    gson.toJson(result)
+                } else {
+                    ""
+                }
+                client.close()
+                task.setResult(json)
+            })
+            .addOnFailureListener(executor, {
+                task.setException(it)
+            })
         return task.task
     }
 
-    fun processBytes(bytes: ByteArray, width: Int, height: Int, rotation: Int, format: Int, options: Options): Task<String> {
+    fun processBytes(
+        bytes: ByteArray,
+        width: Int,
+        height: Int,
+        rotation: Int,
+        format: Int,
+        options: Options
+    ): Task<String> {
         val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
         return processImage(input, options)
     }
@@ -194,6 +202,50 @@ class FaceDetection() {
 
         override fun toString(): String {
             return "faceTracking: $faceTracking, minimumFaceSize: $minimumFaceSize, detectionMode: $detectionMode, landmarkMode: $landmarkMode, contourMode: $contourMode, classificationMode: $classificationMode"
+        }
+
+        companion object {
+            @JvmStatic
+            fun fromJson(value: String): Options? {
+                return fromJson(value, false)
+            }
+
+            @JvmStatic
+            fun fromJson(value: String, returnDefault: Boolean): Options? {
+                return try {
+                    val json = JSONObject(value)
+                    fromJson(json, returnDefault)
+                } catch (e: Exception) {
+                    if (returnDefault) {
+                        Options()
+                    } else {
+                        null
+                    }
+                }
+            }
+
+            @JvmStatic
+            fun fromJson(value: JSONObject, returnDefault: Boolean): Options? {
+                try {
+                    val default = Options()
+                    default.faceTracking = value.optBoolean("faceTracking", default.faceTracking)
+                    default.minimumFaceSize =
+                        value.optDouble("minimumFaceSize", default.minimumFaceSize.toDouble())
+                            .toFloat()
+                    default.setDetectionMode(value.optString("detectionMode", "fast"))
+                    default.setLandMarkMode(value.optString("landmarkMode", "all"))
+                    default.setContourMode(value.optString("contourMode", "all"))
+                    default.setClassificationMode(value.optString("classificationMode", "all"))
+
+                    return default
+                } catch (e: Exception) {
+                    return if (returnDefault) {
+                        Options()
+                    } else {
+                        null
+                    }
+                }
+            }
         }
     }
 }

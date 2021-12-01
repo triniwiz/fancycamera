@@ -7,6 +7,7 @@ import com.google.gson.Gson
 import com.google.mlkit.vision.barcode.Barcode
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.common.InputImage
+import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -24,39 +25,46 @@ class BarcodeScanner {
             }
             if (args.size >= 2) {
                 opts.setBarcodeFormats(
-                        args.firstOrNull() ?: 0, *args.drop(0).toIntArray()
+                    args.firstOrNull() ?: 0, *args.drop(0).toIntArray()
                 )
             } else {
                 opts.setBarcodeFormats(
-                        args.firstOrNull() ?: 0
+                    args.firstOrNull() ?: 0
                 )
             }
         }
         val client = com.google.mlkit.vision.barcode.BarcodeScanning.getClient(opts.build())
         val gson = Gson()
         client.process(image)
-                .addOnSuccessListener(executor, {
-                    val result = mutableListOf<String>()
-                    for (barcode in it) {
-                        val json = gson.toJson(Result(barcode))
-                        result.add(json)
-                    }
-                    val json = if (result.isNotEmpty()) {
-                        gson.toJson(result)
-                    } else {
-                        ""
-                    }
+            .addOnSuccessListener(executor, {
+                val result = mutableListOf<String>()
+                for (barcode in it) {
+                    val json = gson.toJson(Result(barcode))
+                    result.add(json)
+                }
+                val json = if (result.isNotEmpty()) {
+                    gson.toJson(result)
+                } else {
+                    ""
+                }
 
-                    client.close()
-                    task.setResult(json)
-                })
-                .addOnFailureListener(executor, {
-                    task.setException(it)
-                })
+                client.close()
+                task.setResult(json)
+            })
+            .addOnFailureListener(executor, {
+                task.setException(it)
+            })
         return task.task
     }
 
-    fun processBytes(bytes: ByteArray, width: Int, height: Int, rotation: Int, format: Int, options: Options): Task<String> {
+    fun processBytes(
+        bytes: ByteArray,
+        width: Int,
+        height: Int,
+        rotation: Int,
+        format: Int,
+        options: Options
+    ): Task<String> {
         val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
         return processImage(input, options)
     }
@@ -75,7 +83,7 @@ class BarcodeScanner {
         DATA_MATRIX(Barcode.FORMAT_DATA_MATRIX),
         EAN_13(Barcode.FORMAT_EAN_13),
         EAN_8(Barcode.FORMAT_EAN_8),
-        ITF((Barcode.FORMAT_ITF)),
+        ITF(Barcode.FORMAT_ITF),
         QR_CODE(Barcode.FORMAT_QR_CODE),
         UPC_A(Barcode.FORMAT_UPC_A),
         UPC_E(Barcode.FORMAT_UPC_E),
@@ -99,5 +107,53 @@ class BarcodeScanner {
 
     class Options {
         var barcodeFormat: Array<BarcodeFormat> = arrayOf(BarcodeFormat.ALL)
+
+        companion object {
+            @JvmStatic
+            fun fromJson(value: String): Options? {
+                return fromJson(value, false)
+            }
+
+            @JvmStatic
+            fun fromJson(value: String, returnDefault: Boolean): Options? {
+                return try {
+                    val json = JSONObject(value)
+                    fromJson(json, returnDefault)
+                } catch (e: Exception) {
+                    if (returnDefault) {
+                        Options()
+                    } else {
+                        null
+                    }
+                }
+            }
+
+            @JvmStatic
+            fun fromJson(value: JSONObject, returnDefault: Boolean): Options? {
+                try {
+                    val default = Options()
+                    val formats = mutableListOf<BarcodeFormat>()
+                    val barcodeFormat = value.getJSONArray("barcodeFormat")
+                    for (i in 0 until barcodeFormat.length()) {
+                        BarcodeFormat.fromBarcode(barcodeFormat.getInt(i))?.let {
+                            formats.add(it)
+                        }
+                    }
+
+
+                    if (formats.isEmpty() && !returnDefault) {
+                        return null
+                    }
+                    default.barcodeFormat = formats.toTypedArray()
+                    return default
+                } catch (e: Exception) {
+                    return if (returnDefault) {
+                        Options()
+                    } else {
+                        null
+                    }
+                }
+            }
+        }
     }
 }

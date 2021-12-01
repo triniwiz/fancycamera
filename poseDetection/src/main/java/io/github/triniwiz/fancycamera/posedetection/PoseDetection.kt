@@ -11,7 +11,7 @@ import java.util.concurrent.Executors
 
 class PoseDetection {
     private var executor: ExecutorService = Executors.newSingleThreadExecutor()
-    private var singleMode = false
+    var singleMode = false
     fun processImage(image: InputImage): Task<String> {
         val task = TaskCompletionSource<String>()
         val opts = PoseDetectorOptions.Builder()
@@ -25,8 +25,7 @@ class PoseDetection {
         client.process(image)
                 .addOnSuccessListener(executor, {
                     val result = Result(it)
-                    val json: String
-                    json = if (result.landMarks.isEmpty()) {
+                    val json: String = if (result.landMarks.isEmpty()) {
                         ""
                     } else {
                         gson.toJson(result)
