@@ -1,7 +1,7 @@
 package io.github.triniwiz.fancycamera.barcodescanning
 
 import android.graphics.Rect
-import com.google.mlkit.vision.barcode.Barcode
+import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.*
 
 class Result(barcode: Barcode) {

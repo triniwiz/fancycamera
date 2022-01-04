@@ -229,6 +229,58 @@ class FancyCamera : FrameLayout {
         cameraView.setOnSelfieSegmentationListener(callback)
     }
 
+    var barcodeScannerOptions: Any?
+        get() {
+            return cameraView.barcodeScannerOptions
+        }
+        set(value) {
+            if (CameraBase.isBarcodeScanningSupported) {
+                cameraView.barcodeScannerOptions = value
+            }
+        }
+
+    var faceDetectionOptions: Any?
+        get() {
+            return cameraView.barcodeScannerOptions
+        }
+        set(value) {
+            if (CameraBase.isFaceDetectionSupported) {
+                cameraView.faceDetectionOptions = value
+            }
+        }
+
+    var imageLabelingOptions: Any?
+        get() {
+            return cameraView.imageLabelingOptions
+        }
+        set(value) {
+            if (CameraBase.isImageLabelingSupported) {
+                cameraView.imageLabelingOptions = value
+            }
+        }
+
+    var objectDetectionOptions: Any?
+        get() {
+            return cameraView.objectDetectionOptions
+        }
+        set(value) {
+            if (CameraBase.isObjectDetectionSupported) {
+                cameraView.objectDetectionOptions = value
+            }
+        }
+
+
+    var selfieSegmentationOptions: Any?
+        get() {
+            return cameraView.selfieSegmentationOptions
+        }
+        set(value) {
+            if (CameraBase.isSelfieSegmentationSupported) {
+                cameraView.selfieSegmentationOptions = value
+            }
+        }
+
+
     var overridePhotoWidth: Int
         set(value) {
             cameraView.overridePhotoWidth = value

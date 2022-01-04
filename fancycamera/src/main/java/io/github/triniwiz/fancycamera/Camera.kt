@@ -52,6 +52,7 @@ class Camera @JvmOverloads constructor(
             } else {
                 startPreview()
             }
+            field = value
         }
 
     override var zoom: Float = 0.0F
@@ -760,6 +761,9 @@ class Camera @JvmOverloads constructor(
             return
         }
         if (camera != null) {
+            if (flashMode == CameraFlashMode.ON) {
+                camera?.parameters?.flashMode = Camera.Parameters.FLASH_MODE_TORCH
+            }
             camera?.startPreview()
         } else {
             initCamera()

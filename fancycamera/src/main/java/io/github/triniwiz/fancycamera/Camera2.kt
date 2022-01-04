@@ -471,6 +471,7 @@ class Camera2 @JvmOverloads constructor(
         }
         addView(previewView)
         detectSupport()
+        initOptions()
 
         // TODO: Bind this to the view's onCreate method
         cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -842,6 +843,10 @@ class Camera2 @JvmOverloads constructor(
                 preview
             )
         }
+
+        if (flashMode == CameraFlashMode.ON) {
+            camera?.cameraControl?.enableTorch(true)
+        }
         listener?.onReady()
     }
 
@@ -968,6 +973,7 @@ class Camera2 @JvmOverloads constructor(
 
     override var flashMode: CameraFlashMode = CameraFlashMode.OFF
         set(value) {
+            field = value
             if (camera != null) {
                 when (value) {
                     CameraFlashMode.OFF -> {
@@ -979,7 +985,6 @@ class Camera2 @JvmOverloads constructor(
                     CameraFlashMode.AUTO -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_AUTO
                     CameraFlashMode.TORCH -> camera?.cameraControl?.enableTorch(true)
                 }
-                field = value
             }
         }
 

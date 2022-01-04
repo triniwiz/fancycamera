@@ -102,7 +102,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.None // disable to use recorder
+        cameraView.detectorType = DetectorType.Barcode // disable to use recorder
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnBarcodeScanningListener: Success $result")
