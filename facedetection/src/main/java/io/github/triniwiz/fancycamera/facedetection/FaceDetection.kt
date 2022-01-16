@@ -27,10 +27,9 @@ class FaceDetection() {
         val gson = Gson()
         client.process(image)
             .addOnSuccessListener(executor, {
-                val result = mutableListOf<String>()
+                val result = mutableListOf<Result>()
                 for (face in it) {
-                    val json = gson.toJson(Result(face))
-                    result.add(json)
+                    result.add(Result(face))
                 }
 
                 val json = if (result.isNotEmpty()) {

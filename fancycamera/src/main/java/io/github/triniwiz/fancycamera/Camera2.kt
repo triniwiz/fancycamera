@@ -62,12 +62,12 @@ class Camera2 @JvmOverloads constructor(
 
     override var pause: Boolean = false
         set(value) {
+            field = value
             if (value) {
                 stopPreview()
             } else {
                 startPreview()
             }
-            field = value
         }
 
     private fun handleZoom() {
@@ -75,6 +75,7 @@ class Camera2 @JvmOverloads constructor(
             zoom
         )
     }
+
 
     override val previewSurface: Any
         get() {
@@ -659,6 +660,10 @@ class Camera2 @JvmOverloads constructor(
         imageAnalysis = builder.build()
         imageAnalysis?.setAnalyzer(imageAnalysisExecutor, {
             if (it.image != null) {
+                if (currentFrame != processEveryNthFrame) {
+                    incrementCurrentFrame()
+                    return@setAnalyzer
+                }
                 val tasks = mutableListOf<Task<*>>()
                 //BarcodeScanning
                 val barcodeTask = handleBarcodeScanning(it)
@@ -706,6 +711,7 @@ class Camera2 @JvmOverloads constructor(
                     val proxy = it
                     Tasks.whenAllComplete(tasks).addOnCompleteListener {
                         proxy.close()
+                        resetCurrentFrame()
                     }
                 }
             }
@@ -828,7 +834,6 @@ class Camera2 @JvmOverloads constructor(
                 it.setSurfaceProvider(this.previewView.surfaceProvider)
             }
 
-
         camera = if (detectorType != DetectorType.None && isMLSupported) {
             cameraProvider?.bindToLifecycle(
                 context as LifecycleOwner,
@@ -844,14 +849,18 @@ class Camera2 @JvmOverloads constructor(
             )
         }
 
-        if (flashMode == CameraFlashMode.ON) {
+        if (flashMode == CameraFlashMode.ON && camera?.cameraInfo?.hasFlashUnit() == true) {
             camera?.cameraControl?.enableTorch(true)
         }
+
         listener?.onReady()
     }
 
     @SuppressLint("RestrictedApi")
     private fun initVideoCapture() {
+        if (pause) {
+            return
+        }
         if (hasCameraPermission() && hasAudioPermission()) {
             val profile = getCamcorderProfile(quality)
             val builder = VideoCapture.Builder()
@@ -953,11 +962,10 @@ class Camera2 @JvmOverloads constructor(
             }
         }
         updateImageCapture()
-
         isStarted = true
+        resetCurrentFrame()
         listener?.onCameraOpen()
     }
-
 
     override fun startPreview() {
         if (!isStarted) {
@@ -974,16 +982,16 @@ class Camera2 @JvmOverloads constructor(
     override var flashMode: CameraFlashMode = CameraFlashMode.OFF
         set(value) {
             field = value
-            if (camera != null) {
+            camera?.let {
                 when (value) {
                     CameraFlashMode.OFF -> {
-                        camera?.cameraControl?.enableTorch(false)
+                        it.cameraControl.enableTorch(false)
                         imageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
                     }
                     CameraFlashMode.ON, CameraFlashMode.RED_EYE -> imageCapture?.flashMode =
                         ImageCapture.FLASH_MODE_ON
                     CameraFlashMode.AUTO -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_AUTO
-                    CameraFlashMode.TORCH -> camera?.cameraControl?.enableTorch(true)
+                    CameraFlashMode.TORCH -> it.cameraControl.enableTorch(true)
                 }
             }
         }

@@ -38,11 +38,7 @@ class FancyCamera : FrameLayout {
             return cameraView.pause
         }
         set(value) {
-            if (value) {
-                cameraView.stopPreview()
-            } else {
-                cameraView.startPreview()
-            }
+            cameraView.pause = value
         }
 
     var zoom: Float

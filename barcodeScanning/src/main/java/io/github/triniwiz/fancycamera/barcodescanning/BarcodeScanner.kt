@@ -37,10 +37,9 @@ class BarcodeScanner {
         val gson = Gson()
         client.process(image)
             .addOnSuccessListener(executor, {
-                val result = mutableListOf<String>()
+                val result = mutableListOf<Result>()
                 for (barcode in it) {
-                    val json = gson.toJson(Result(barcode))
-                    result.add(json)
+                    result.add(Result(barcode))
                 }
                 val json = if (result.isNotEmpty()) {
                     gson.toJson(result)

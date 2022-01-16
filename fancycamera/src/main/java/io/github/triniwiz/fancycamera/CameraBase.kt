@@ -24,6 +24,8 @@ import java.util.concurrent.Executors
 abstract class CameraBase @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    var processEveryNthFrame: Int = 0
+    internal var currentFrame: Int = 0
     abstract var pause: Boolean
     abstract var whiteBalance: WhiteBalance
     abstract var position: CameraPosition
@@ -69,6 +71,22 @@ abstract class CameraBase @JvmOverloads constructor(
     internal var onTextRecognitionListener: ImageAnalysisCallback? = null
     internal var onSurfaceUpdateListener: SurfaceUpdateListener? = null
     internal var onSelfieSegmentationListener: ImageAnalysisCallback? = null
+
+    internal fun resetCurrentFrame() {
+        if (isProcessingEveryNthFrame()) {
+            currentFrame = 0
+        }
+    }
+
+    internal fun isProcessingEveryNthFrame(): Boolean {
+        return processEveryNthFrame > 0
+    }
+
+    internal fun incrementCurrentFrame() {
+        if (isProcessingEveryNthFrame()) {
+            currentFrame++
+        }
+    }
 
     fun setonSurfaceUpdateListener(callback: SurfaceUpdateListener?) {
         onSurfaceUpdateListener = callback

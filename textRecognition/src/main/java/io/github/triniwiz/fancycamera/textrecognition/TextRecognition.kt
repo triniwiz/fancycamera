@@ -18,8 +18,7 @@ class TextRecognition {
         client.process(image)
                 .addOnSuccessListener(executor, {
                     val result = Result(it)
-                    val json: String
-                    json = if (result.text.isEmpty() && result.blocks.isEmpty()) {
+                    val json: String = if (result.text.isEmpty() && result.blocks.isEmpty()) {
                         ""
                     } else {
                         gson.toJson(result)

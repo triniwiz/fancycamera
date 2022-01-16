@@ -21,10 +21,9 @@ class ImageLabeling {
         val gson = Gson()
         client.process(image)
             .addOnSuccessListener(executor, {
-                val result = mutableListOf<String>()
+                val result = mutableListOf<Result>()
                 for (label in it) {
-                    val json = gson.toJson(Result(label))
-                    result.add(json)
+                    result.add(Result(label))
                 }
                 val json = if (result.isNotEmpty()) {
                     gson.toJson(result)

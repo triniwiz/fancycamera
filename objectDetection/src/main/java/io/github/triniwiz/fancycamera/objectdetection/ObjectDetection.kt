@@ -31,10 +31,9 @@ class ObjectDetection {
         val gson = Gson()
         client.process(image)
             .addOnSuccessListener(executor, {
-                val result = mutableListOf<String>()
+                val result = mutableListOf<Result>()
                 for (detected in it) {
-                    val json = gson.toJson(Result(detected))
-                    result.add(json)
+                    result.add(Result(detected))
                 }
 
                 val json = if (result.isNotEmpty()) {

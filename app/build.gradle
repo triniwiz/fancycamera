@@ -6,7 +6,7 @@ android {
     buildToolsVersion BUILD_TOOLS_VERSION as String
     defaultConfig {
         applicationId "co.fitcom.videorecorder"
-        minSdkVersion 17
+        minSdkVersion 19
         targetSdkVersion COMPILE_SDK_VERSION as int
         versionCode 1
         versionName "1.0"
@@ -32,11 +32,11 @@ dependencies {
     implementation project(path: ':fancycamera')
     implementation project(path: ':faceDetection')
     implementation project(path: ':textRecognition')
-    implementation project(path: ':barcodeScanning')
     implementation project(path: ':objectDetection')
     implementation project(path: ':imageLabeling')
     implementation project(path: ':poseDetection')
     implementation project(path: ':selfieSegmentation')
+    implementation project(path: ':barcodeScanning')
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.4.0'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'

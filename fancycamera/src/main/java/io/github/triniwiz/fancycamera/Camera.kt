@@ -47,12 +47,12 @@ class Camera @JvmOverloads constructor(
 
     override var pause: Boolean = false
         set(value) {
+            field = value
             if (value) {
                 stopPreview()
             } else {
                 startPreview()
             }
-            field = value
         }
 
     override var zoom: Float = 0.0F
@@ -686,6 +686,10 @@ class Camera @JvmOverloads constructor(
                 camera?.addCallbackBuffer(previewBuffer!!.array())
                 camera?.setPreviewCallbackWithBuffer { data, camera ->
                     if (data != null) {
+                        if (currentFrame != processEveryNthFrame) {
+                            incrementCurrentFrame()
+                            return@setPreviewCallbackWithBuffer
+                        }
                         val tasks = mutableListOf<Task<*>>()
                         //BarcodeScanner
                         val barcodeTask = handleBarcodeScanning(data, camera)
@@ -741,6 +745,8 @@ class Camera @JvmOverloads constructor(
                                         )
                                     )
                                 } catch (e: java.lang.Exception) {
+                                } finally {
+                                    resetCurrentFrame()
                                 }
                             }
                         }
@@ -749,6 +755,7 @@ class Camera @JvmOverloads constructor(
             }
             updateCameraDisplayOrientation(context as Activity, position.value, camera)
             camera?.startPreview()
+            resetCurrentFrame()
             listener?.onCameraOpen()
         } catch (error: RuntimeException) {
             error.printStackTrace()
