@@ -849,10 +849,6 @@ class Camera2 @JvmOverloads constructor(
             )
         }
 
-        if (flashMode == CameraFlashMode.ON && camera?.cameraInfo?.hasFlashUnit() == true) {
-            camera?.cameraControl?.enableTorch(true)
-        }
-
         listener?.onReady()
     }
 
@@ -962,6 +958,11 @@ class Camera2 @JvmOverloads constructor(
             }
         }
         updateImageCapture()
+
+        if (flashMode == CameraFlashMode.TORCH && camera?.cameraInfo?.hasFlashUnit() == true) {
+            camera?.cameraControl?.enableTorch(true)
+        }
+
         isStarted = true
         resetCurrentFrame()
         listener?.onCameraOpen()
