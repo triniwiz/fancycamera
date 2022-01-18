@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.media.CamcorderProfile
 import android.media.MediaRecorder
 import android.os.Build
@@ -24,6 +25,8 @@ import java.util.concurrent.Executors
 abstract class CameraBase @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    abstract var retrieveLatestImage: Boolean
+    internal var latestImage: Bitmap? = null
     var processEveryNthFrame: Int = 0
     internal var currentFrame: Int = 0
     abstract var pause: Boolean

@@ -60,6 +60,14 @@ class Camera2 @JvmOverloads constructor(
     private var mLock = Any()
     private var cameraManager: CameraManager? = null
 
+    override var retrieveLatestImage: Boolean = false
+        set(value) {
+            field = value
+            if (!value && latestImage != null) {
+                latestImage = null
+            }
+        }
+
     override var pause: Boolean = false
         set(value) {
             field = value
@@ -659,11 +667,17 @@ class Camera2 @JvmOverloads constructor(
         val extender = Camera2Interop.Extender(builder)
         imageAnalysis = builder.build()
         imageAnalysis?.setAnalyzer(imageAnalysisExecutor, {
+
+            if (it.image != null && currentFrame != processEveryNthFrame) {
+                incrementCurrentFrame()
+                return@setAnalyzer
+            }
+
+            if (retrieveLatestImage) {
+                latestImage = BitmapUtils.getBitmap(it)
+            }
+
             if (it.image != null) {
-                if (currentFrame != processEveryNthFrame) {
-                    incrementCurrentFrame()
-                    return@setAnalyzer
-                }
                 val tasks = mutableListOf<Task<*>>()
                 //BarcodeScanning
                 val barcodeTask = handleBarcodeScanning(it)

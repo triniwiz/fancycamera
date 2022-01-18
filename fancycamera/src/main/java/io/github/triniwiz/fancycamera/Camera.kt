@@ -45,6 +45,14 @@ class Camera @JvmOverloads constructor(
         }
     }
 
+    override var retrieveLatestImage: Boolean = false
+        set(value) {
+            field = value
+            if (!value && latestImage != null) {
+                latestImage = null
+            }
+        }
+
     override var pause: Boolean = false
         set(value) {
             field = value
@@ -690,6 +698,17 @@ class Camera @JvmOverloads constructor(
                             incrementCurrentFrame()
                             return@setPreviewCallbackWithBuffer
                         }
+
+                        if (retrieveLatestImage) {
+                            latestImage = BitmapUtils.getBitmap(data, FrameMetadata
+                                .Builder()
+                                .setWidth(camera.parameters.previewSize.width)
+                                .setHeight(camera.parameters.previewSize.height)
+                                .build()
+                            )
+                        }
+
+
                         val tasks = mutableListOf<Task<*>>()
                         //BarcodeScanner
                         val barcodeTask = handleBarcodeScanning(data, camera)

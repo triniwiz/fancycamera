@@ -10,6 +10,7 @@ package io.github.triniwiz.fancycamera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.AttributeSet
@@ -31,6 +32,19 @@ class FancyCamera : FrameLayout {
     private var isGettingAudioLvls = false
     private var mEMA = 0.0
     private lateinit var cameraView: CameraBase
+
+    var retrieveLatestImage: Boolean
+        get() {
+            return cameraView.retrieveLatestImage
+        }
+        set(value) {
+            cameraView.retrieveLatestImage = value
+        }
+
+    val latestImage: Bitmap?
+        get() {
+            return cameraView.latestImage
+        }
 
 
     var pause: Boolean
