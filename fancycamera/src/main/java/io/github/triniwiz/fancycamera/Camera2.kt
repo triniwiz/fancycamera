@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
+import android.util.Log
+import android.view.ScaleGestureDetector
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -59,6 +61,7 @@ class Camera2 @JvmOverloads constructor(
     private var isForceStopping = false
     private var mLock = Any()
     private var cameraManager: CameraManager? = null
+    private var scaleGestureDetector: ScaleGestureDetector? = null
 
     override var retrieveLatestImage: Boolean = false
         set(value) {
@@ -175,22 +178,22 @@ class Camera2 @JvmOverloads constructor(
             inputImage,
             barcodeScannerOptions!!
         ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onBarcodeScanningListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onBarcodeScanningListener?.onError(
                     it.message
                         ?: "Failed to complete face detection.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -221,22 +224,22 @@ class Camera2 @JvmOverloads constructor(
             inputImage,
             faceDetectionOptions!!
         ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onFacesDetectedListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onFacesDetectedListener?.onError(
                     it.message
                         ?: "Failed to complete face detection.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -267,22 +270,22 @@ class Camera2 @JvmOverloads constructor(
             inputImage,
             imageLabelingOptions!!
         ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onImageLabelingListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onImageLabelingListener?.onError(
                     it.message
                         ?: "Failed to complete face detection.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -313,22 +316,22 @@ class Camera2 @JvmOverloads constructor(
             inputImage,
             objectDetectionOptions!!
         ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onObjectDetectedListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onObjectDetectedListener?.onError(
                     it.message
                         ?: "Failed to complete face detection.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -350,22 +353,22 @@ class Camera2 @JvmOverloads constructor(
             PoseDetectionClazz.getDeclaredMethod("processImage", InputImageClazz)
         val returnTask = TaskCompletionSource<Boolean>()
         val task = processImageMethod.invoke(poseDetection, inputImage) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onPoseDetectedListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onPoseDetectedListener?.onError(
                     it.message
                         ?: "Failed to complete text recognition.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -387,22 +390,22 @@ class Camera2 @JvmOverloads constructor(
             TextRecognitionClazz.getDeclaredMethod("processImage", InputImageClazz)
         val returnTask = TaskCompletionSource<Boolean>()
         val task = processImageMethod.invoke(textRecognition, inputImage) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it.isNotEmpty()) {
                 mainHandler.post {
                     onTextRecognitionListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onTextRecognitionListener?.onError(
                     it.message
                         ?: "Failed to complete text recognition.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
@@ -436,27 +439,62 @@ class Camera2 @JvmOverloads constructor(
             inputImage,
             selfieSegmentationOptions
         ) as Task<Any>
-        task.addOnSuccessListener(imageAnalysisExecutor, {
+        task.addOnSuccessListener(imageAnalysisExecutor) {
             if (it != null) {
                 mainHandler.post {
                     onSelfieSegmentationListener?.onSuccess(it)
                 }
             }
-        }).addOnFailureListener(imageAnalysisExecutor, {
+        }.addOnFailureListener(imageAnalysisExecutor) {
             mainHandler.post {
                 onSelfieSegmentationListener?.onError(
                     it.message
                         ?: "Failed to complete text recognition.", it
                 )
             }
-        }).addOnCompleteListener(imageAnalysisExecutor, {
+        }.addOnCompleteListener(imageAnalysisExecutor) {
             returnTask.setResult(true)
-        })
+        }
         return returnTask.task
     }
 
 
+    private fun handlePinchZoom() {
+        if (!enablePinchZoom) {
+            return
+        }
+        val listener: ScaleGestureDetector.SimpleOnScaleGestureListener =
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    camera?.cameraInfo?.zoomState?.value?.let { zoomState ->
+                        camera?.cameraControl?.setZoomRatio(
+                            detector.scaleFactor * zoomState.zoomRatio
+                        )
+                    }
+                    return true
+                }
+            }
+        scaleGestureDetector = ScaleGestureDetector(context, listener)
+        previewView.setOnTouchListener { view, event ->
+            scaleGestureDetector?.onTouchEvent(event)
+            view.performClick()
+            true
+        }
+    }
+
+    override var enablePinchZoom: Boolean = true
+        set(value) {
+            field = value
+            if (value) {
+                handlePinchZoom()
+            } else {
+                scaleGestureDetector = null
+            }
+        }
+
+
     init {
+        handlePinchZoom()
         previewView.afterMeasured {
             if (autoFocus) {
                 val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
@@ -666,7 +704,7 @@ class Camera2 @JvmOverloads constructor(
             }
         val extender = Camera2Interop.Extender(builder)
         imageAnalysis = builder.build()
-        imageAnalysis?.setAnalyzer(imageAnalysisExecutor, {
+        imageAnalysis?.setAnalyzer(imageAnalysisExecutor) {
 
             if (it.image != null && currentFrame != processEveryNthFrame) {
                 incrementCurrentFrame()
@@ -729,12 +767,13 @@ class Camera2 @JvmOverloads constructor(
                     }
                 }
             }
-        })
+        }
     }
 
     private var cachedPictureRatioSizeMap: MutableMap<String, MutableList<Size>> = HashMap()
     private var cachedPreviewRatioSizeMap: MutableMap<String, MutableList<Size>> = HashMap()
 
+    @SuppressLint("UnsafeOptInUsageError")
     private fun updateImageCapture() {
         var wasBounded = false
         if (imageCapture != null) {

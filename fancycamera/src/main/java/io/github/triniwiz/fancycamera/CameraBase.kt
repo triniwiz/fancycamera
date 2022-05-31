@@ -65,6 +65,7 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract fun getAvailablePictureSizes(ratio: String): Array<Size>
     abstract var displayRatio: String
     abstract var pictureSize: String
+    abstract var enablePinchZoom: Boolean
     abstract var zoom: Float
     internal var onBarcodeScanningListener: ImageAnalysisCallback? = null
     internal var onFacesDetectedListener: ImageAnalysisCallback? = null

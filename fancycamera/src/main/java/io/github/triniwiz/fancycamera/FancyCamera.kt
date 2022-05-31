@@ -33,6 +33,15 @@ class FancyCamera : FrameLayout {
     private var mEMA = 0.0
     private lateinit var cameraView: CameraBase
 
+
+    var enablePinchZoom: Boolean
+    get() {
+        return cameraView.enablePinchZoom
+    }
+    set(value) {
+        cameraView.enablePinchZoom = value
+    }
+
     var retrieveLatestImage: Boolean
         get() {
             return cameraView.retrieveLatestImage

@@ -36,7 +36,7 @@ class BarcodeScanner {
         val client = com.google.mlkit.vision.barcode.BarcodeScanning.getClient(opts.build())
         val gson = Gson()
         client.process(image)
-            .addOnSuccessListener(executor, {
+            .addOnSuccessListener(executor) {
                 val result = mutableListOf<Result>()
                 for (barcode in it) {
                     result.add(Result(barcode))
@@ -49,7 +49,7 @@ class BarcodeScanner {
 
                 client.close()
                 task.setResult(json)
-            })
+            }
             .addOnFailureListener(executor, {
                 task.setException(it)
             })
