@@ -931,7 +931,10 @@ class Camera2 @JvmOverloads constructor(
 
             val recorder = Recorder.Builder()
                 .setQualitySelector(
-                    QualitySelector.from(getRecorderQuality(quality))
+                    QualitySelector.from(
+                        getRecorderQuality(quality),
+                        FallbackStrategy.lowerQualityOrHigherThan(androidx.camera.video.Quality.SD)
+                    )
                 ).setExecutor(videoCaptureExecutor)
                 .build()
 
@@ -1089,19 +1092,20 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
 
-            val opts  = FileOutputOptions.Builder(file!!).build()
+            val opts = FileOutputOptions.Builder(file!!).build()
 
             val pending = videoCapture?.output?.prepareRecording(
                 context, opts
             )
 
-            if(enableAudio){
+            if (enableAudio) {
                 pending?.withAudioEnabled()
             }
 
-            recording = pending?.start(ContextCompat.getMainExecutor(context)
+            recording = pending?.start(
+                ContextCompat.getMainExecutor(context)
             ) { event ->
-                when(event){
+                when (event) {
                     is VideoRecordEvent.Start -> {
                         isRecording = true
                         if (flashMode == CameraFlashMode.ON) {
@@ -1114,7 +1118,7 @@ class Camera2 @JvmOverloads constructor(
                         isRecording = false
                         stopDurationTimer()
 
-                        if (event.hasError()){
+                        if (event.hasError()) {
                             file = null
                             val e = if (event.cause != null) {
                                 Exception(event.cause)
@@ -1131,7 +1135,7 @@ class Camera2 @JvmOverloads constructor(
                                     isForceStopping = false
                                 }
                             }
-                        }else {
+                        } else {
                             if (isForceStopping) {
                                 if (file != null) {
                                     file!!.delete()
