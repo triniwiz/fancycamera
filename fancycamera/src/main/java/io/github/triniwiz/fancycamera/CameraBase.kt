@@ -25,6 +25,7 @@ import java.util.concurrent.Executors
 abstract class CameraBase @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    var enableAudio: Boolean = true
     abstract var retrieveLatestImage: Boolean
     internal var latestImage: Bitmap? = null
     var processEveryNthFrame: Int = 0

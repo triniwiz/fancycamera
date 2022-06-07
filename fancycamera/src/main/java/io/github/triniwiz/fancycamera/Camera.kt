@@ -1183,11 +1183,15 @@ class Camera @JvmOverloads constructor(
                 camera!!.unlock()
                 try {
                     recorder.setCamera(camera)
-                    recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                    if (enableAudio) {
+                        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                    }
                     recorder.setVideoSource(MediaRecorder.VideoSource.CAMERA)
                     recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     recorder.setVideoSize(profile.videoFrameWidth, profile.videoFrameHeight)
-                    recorder.setAudioChannels(profile.audioChannels)
+                    if (enableAudio) {
+                        recorder.setAudioChannels(profile.audioChannels)
+                    }
                     var maxVideoBitrate = profile.videoBitRate
                     if (this.maxVideoBitrate > -1) {
                         maxVideoBitrate = this.maxVideoBitrate
@@ -1207,14 +1211,18 @@ class Camera @JvmOverloads constructor(
                             maxVideoBitrate
                         )
                     )
-                    recorder.setAudioEncodingBitRate(
-                        Math.min(
-                            profile.audioBitRate,
-                            maxAudioBitRate
+                    if (enableAudio) {
+                        recorder.setAudioEncodingBitRate(
+                            Math.min(
+                                profile.audioBitRate,
+                                maxAudioBitRate
+                            )
                         )
-                    )
+                    }
                     recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                    recorder.setAudioEncoder(profile.audioCodec)
+                    if (enableAudio) {
+                        recorder.setAudioEncoder(profile.audioCodec)
+                    }
                     recorder.setOutputFile(file!!.path)
                     recorder.prepare()
                     if (flashMode == CameraFlashMode.ON) {
