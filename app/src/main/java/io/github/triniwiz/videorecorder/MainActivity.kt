@@ -38,7 +38,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        //FancyCamera.forceV1 = true
+        FancyCamera.forceV1 = true
         setContentView(R.layout.activity_main)
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
@@ -101,7 +101,7 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.Barcode // disable to use recorder
+        cameraView.detectorType = DetectorType.All // disable to use recorder
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnBarcodeScanningListener: Success $result")

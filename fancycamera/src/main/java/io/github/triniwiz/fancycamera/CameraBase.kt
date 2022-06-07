@@ -25,6 +25,7 @@ import java.util.concurrent.Executors
 abstract class CameraBase @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    var enableAudio: Boolean = true
     abstract var retrieveLatestImage: Boolean
     internal var latestImage: Bitmap? = null
     var processEveryNthFrame: Int = 0
@@ -65,6 +66,7 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract fun getAvailablePictureSizes(ratio: String): Array<Size>
     abstract var displayRatio: String
     abstract var pictureSize: String
+    abstract var enablePinchZoom: Boolean
     abstract var zoom: Float
     internal var onBarcodeScanningListener: ImageAnalysisCallback? = null
     internal var onFacesDetectedListener: ImageAnalysisCallback? = null
