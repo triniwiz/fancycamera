@@ -271,7 +271,7 @@ abstract class CameraBase @JvmOverloads constructor(
 
     private val orientationEventListener = object : OrientationEventListener(context) {
         override fun onOrientationChanged(orientation: Int) {
-            if (rotation == CameraOrientation.UNKNOWN) {
+            if (orientation > -1) {
                 val newOrientation = when (orientation) {
                     in 45 until 135 -> 270
                     in 135 until 225 -> 180
