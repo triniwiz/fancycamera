@@ -26,13 +26,13 @@ android {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation "com.google.android.gms:play-services-tasks:18.0.1"
+    implementation "com.google.android.gms:play-services-tasks:18.0.2"
     api "androidx.appcompat:appcompat:$app_compat_version"
     //noinspection KtxExtensionAvailable
-    api "androidx.core:core:1.6.0"
+    api "androidx.core:core:1.9.0"
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test:runner:1.4.0'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.4.0'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
     api "androidx.camera:camera-core:$camerax_version"
     api "androidx.camera:camera-camera2:$camerax_version"
     api "androidx.camera:camera-view:$camerax_view_version"
@@ -40,7 +40,7 @@ dependencies {
     api "androidx.camera:camera-lifecycle:$camerax_lifecycle_version"
     api "androidx.camera:camera-video:$camerax_version"
     api "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    api "androidx.exifinterface:exifinterface:1.3.3"
+    api "androidx.exifinterface:exifinterface:1.3.6"
     implementation "com.google.code.gson:gson:$gson_version"
 }
 

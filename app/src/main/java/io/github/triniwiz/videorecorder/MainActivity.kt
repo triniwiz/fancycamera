@@ -19,9 +19,8 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.URL
+import java.util.*
 
-import java.util.Timer
-import java.util.TimerTask
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -38,13 +37,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        FancyCamera.forceV1 = true
+       // FancyCamera.forceV1 = true
         setContentView(R.layout.activity_main)
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
         container = findViewById(R.id.container)
         cameraView = FancyCamera(this)
-        cameraView.ratio = "16:9"
+       // cameraView.ratio = "16:9"
         cameraView.autoFocus = true
         cameraView.position = CameraPosition.BACK
         cameraView.setListener(object : CameraEventListenerUI() {
@@ -174,7 +173,7 @@ class MainActivity : AppCompatActivity() {
         })
         cameraView.saveToGallery = true
         container.addView(cameraView)
-        processBarcodeBitmap()
+      //  processBarcodeBitmap()
 
     }
 
@@ -266,6 +265,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        cameraView.stopPreview()
         cameraView.stop()
         super.onPause()
         if (levelsTask != null) {

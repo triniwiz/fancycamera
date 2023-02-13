@@ -10,6 +10,7 @@ import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+
 class ObjectDetection {
     private var executor: ExecutorService = Executors.newSingleThreadExecutor()
     fun processImage(image: InputImage, options: Options): Task<String> {
@@ -30,7 +31,7 @@ class ObjectDetection {
         val client = com.google.mlkit.vision.objects.ObjectDetection.getClient(opts.build())
         val gson = Gson()
         client.process(image)
-            .addOnSuccessListener(executor, {
+            .addOnSuccessListener(executor) {
                 val result = mutableListOf<Result>()
                 for (detected in it) {
                     result.add(Result(detected))
@@ -42,10 +43,10 @@ class ObjectDetection {
                     ""
                 }
                 task.setResult(json)
-            })
-            .addOnFailureListener(executor, {
+            }
+            .addOnFailureListener(executor) {
                 task.setException(it)
-            })
+            }
         return task.task
     }
 

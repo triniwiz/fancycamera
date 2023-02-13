@@ -23,7 +23,7 @@ class Photo : AppCompatActivity() {
         cameraView = findViewById(R.id.PhotoView)
         //FancyCamera.forceV1 = true
         cameraView.autoFocus = true
-        cameraView.quality = Quality.HIGHEST
+      //  cameraView.quality = Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onReadyUI() {
                 
@@ -58,7 +58,7 @@ class Photo : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.Face
+        cameraView.detectorType = DetectorType.None
         cameraView.setOnFacesDetectedListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnFacesDetectedListener: Success ${result}")
@@ -79,7 +79,7 @@ class Photo : AppCompatActivity() {
                 exception.printStackTrace()
             }
         })
-        cameraView.saveToGallery = true
+       // cameraView.saveToGallery = true
         cameraView.autoSquareCrop = true
     }
 
@@ -112,7 +112,6 @@ class Photo : AppCompatActivity() {
         cameraView.stop()
         super.onPause()
     }
-
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)

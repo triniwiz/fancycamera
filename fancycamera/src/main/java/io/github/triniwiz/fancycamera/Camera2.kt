@@ -27,7 +27,10 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.util.Consumer
 import androidx.exifinterface.media.ExifInterface
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.OnLifecycleEvent
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
@@ -462,7 +465,6 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-
     private fun handlePinchZoom() {
         if (!enablePinchZoom) {
             return
@@ -516,7 +518,7 @@ class Camera2 @JvmOverloads constructor(
                             setAutoCancelDuration(2, TimeUnit.SECONDS)
                         }.build()
                     )
-                } catch (e: CameraInfoUnavailableException) {
+                } catch (_: CameraInfoUnavailableException) {
                 }
             }
         }
@@ -562,6 +564,12 @@ class Camera2 @JvmOverloads constructor(
                         cameraProvider?.unbind(imageAnalysis!!)
                     }
                 } else {
+                    videoCapture?.let {
+                        if (cameraProvider?.isBound(it) == true) {
+                            cameraProvider?.unbind(it)
+                        }
+                    }
+
                     if (cameraProvider?.isBound(imageAnalysis!!) == false) {
                         camera = cameraProvider?.bindToLifecycle(
                             context as LifecycleOwner,
@@ -581,7 +589,7 @@ class Camera2 @JvmOverloads constructor(
             var count = 0
             try {
                 count = cameraManager?.cameraIdList?.size ?: 0
-            } catch (e: CameraAccessException) {
+            } catch (_: CameraAccessException) {
             }
             return count
         }
@@ -621,7 +629,7 @@ class Camera2 @JvmOverloads constructor(
             else -> Surface.ROTATION_0
         }
         imageCapture?.targetRotation = rotation
-        videoCapture?.setTargetRotation(rotation)
+        videoCapture?.targetRotation = rotation
         imageAnalysis?.targetRotation = rotation
     }
 
@@ -638,7 +646,7 @@ class Camera2 @JvmOverloads constructor(
     private fun safeUnbindAll() {
         try {
             cameraProvider?.unbindAll()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
         } finally {
             if (isStarted) {
                 listener?.onCameraClose()
@@ -778,7 +786,7 @@ class Camera2 @JvmOverloads constructor(
     private var cachedPreviewRatioSizeMap: MutableMap<String, MutableList<Size>> = HashMap()
 
     @SuppressLint("UnsafeOptInUsageError")
-    private fun updateImageCapture() {
+    private fun updateImageCapture(autoBound: Boolean = true) {
         var wasBounded = false
         if (imageCapture != null) {
             wasBounded = cameraProvider?.isBound(imageCapture!!) ?: false
@@ -789,6 +797,7 @@ class Camera2 @JvmOverloads constructor(
         }
 
         val builder = ImageCapture.Builder().apply {
+
             if (getDeviceRotation() > -1) {
                 setTargetRotation(getDeviceRotation())
             }
@@ -865,13 +874,16 @@ class Camera2 @JvmOverloads constructor(
 
         imageCapture = builder.build()
 
-        if (wasBounded) {
-            if (!cameraProvider!!.isBound(imageCapture!!)) {
-                cameraProvider?.bindToLifecycle(
-                    context as LifecycleOwner,
-                    selectorFromPosition(),
-                    imageCapture!!
-                )
+        if (wasBounded || autoBound) {
+            cameraProvider?.let { cameraProvider ->
+                if (cameraProvider.isBound(imageCapture!!)) {
+                    cameraProvider.bindToLifecycle(
+                        context as LifecycleOwner,
+                        selectorFromPosition(),
+                        imageCapture!!,
+                        preview!!
+                    )
+                }
             }
         }
     }
@@ -895,8 +907,7 @@ class Camera2 @JvmOverloads constructor(
             cameraProvider?.bindToLifecycle(
                 context as LifecycleOwner,
                 selectorFromPosition(),
-                preview,
-                imageAnalysis
+                preview
             )
         } else {
             cameraProvider?.bindToLifecycle(
@@ -909,7 +920,7 @@ class Camera2 @JvmOverloads constructor(
         listener?.onReady()
     }
 
-    internal fun getRecorderQuality(quality: Quality): androidx.camera.video.Quality {
+    private fun getRecorderQuality(quality: Quality): androidx.camera.video.Quality {
         return when (quality) {
             Quality.MAX_480P -> androidx.camera.video.Quality.SD
             Quality.MAX_720P -> androidx.camera.video.Quality.HD
@@ -927,7 +938,6 @@ class Camera2 @JvmOverloads constructor(
             return
         }
         if (hasCameraPermission() && hasAudioPermission()) {
-            val profile = getCamcorderProfile(quality)
 
             val recorder = Recorder.Builder()
                 .setQualitySelector(
@@ -947,7 +957,6 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-
     @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
     private fun refreshCamera() {
         if (pause) {
@@ -961,9 +970,9 @@ class Camera2 @JvmOverloads constructor(
         imageCapture = null
         imageAnalysis?.clearAnalyzer()
         imageAnalysis = null
+        camera = null
         preview?.setSurfaceProvider(null)
         preview = null
-        safeUnbindAll()
 
         if (detectorType != DetectorType.None) {
             setUpAnalysis()
@@ -1006,7 +1015,8 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
         }
-        updateImageCapture()
+
+        updateImageCapture(true)
 
         if (flashMode == CameraFlashMode.TORCH && camera?.cameraInfo?.hasFlashUnit() == true) {
             camera?.cameraControl?.enableTorch(true)
@@ -1260,13 +1270,16 @@ class Camera2 @JvmOverloads constructor(
         cameraProvider?.let { provider ->
             videoCapture?.let { if (provider.isBound(it)) provider.unbind(it) }
 
-            if (imageCapture == null) updateImageCapture()
+            if (imageCapture == null) {
+                updateImageCapture(true)
+            }
             imageCapture?.let { capture ->
                 if (!provider.isBound(capture)) {
                     provider.bindToLifecycle(
                         context as LifecycleOwner,
                         selectorFromPosition(),
-                        capture
+                        capture,
+                        preview
                     )
                 }
             } ?: run {
@@ -1328,7 +1341,7 @@ class Camera2 @JvmOverloads constructor(
             val matrix = Matrix()
 
             // Registering image's required rotation, provided by Androidx ImageAnalysis
-            var imageTargetRotation = image.imageInfo.rotationDegrees
+            val imageTargetRotation = image.imageInfo.rotationDegrees
             matrix.postRotate(imageTargetRotation.toFloat())
 
             // Flipping over the image in case it is the front camera
@@ -1384,7 +1397,7 @@ class Camera2 @JvmOverloads constructor(
                 val subsec = (now - convertFromExifDateTime(datetime).time).toString()
                 exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
                 exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
-            } catch (e: ParseException) {
+            } catch (_: ParseException) {
             }
 
             exif.rotate(image.imageInfo.rotationDegrees)
@@ -1413,7 +1426,7 @@ class Camera2 @JvmOverloads constructor(
             }
             try {
                 image.close()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
 
             }
             if (!isError) {
@@ -1519,7 +1532,6 @@ class Camera2 @JvmOverloads constructor(
         return isRecording
     }
 
-
     override fun toggleCamera() {
         if (!isRecording) {
             position = when (position) {
@@ -1556,9 +1568,10 @@ class Camera2 @JvmOverloads constructor(
             if (isRecording) {
                 isForceStopping = true
                 stopRecording()
-            } else {
-                safeUnbindAll()
             }
+
+            safeUnbindAll()
+
             preview?.setSurfaceProvider(null)
             preview = null
             imageCapture = null
