@@ -534,7 +534,6 @@ class Camera2 @JvmOverloads constructor(
                 cameraProvider = cameraProviderFuture.get()
                 refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
-                e.printStackTrace()
                 listener?.onCameraError("Failed to get camera", e)
                 isStarted = false
             }
