@@ -93,6 +93,20 @@ class FancyCamera : FrameLayout {
         set(value) {
             cameraView.detectorType = value
         }
+
+
+    fun setDetectorWithName(name: String?) {
+        if (name == null) {
+            detectorType = DetectorType.None
+            return
+        }
+
+        DetectorType.fromName(name)?.let { name ->
+            detectorType = name
+        }
+
+    }
+
     var ratio: String
         get() {
             return cameraView.displayRatio

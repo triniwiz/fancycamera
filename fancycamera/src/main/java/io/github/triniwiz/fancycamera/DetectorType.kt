@@ -8,6 +8,7 @@ enum class DetectorType(private val type: String) {
 
 
     companion object {
+        @JvmStatic
         fun fromInt(value: Int): DetectorType? {
             return when (value) {
                 0 -> Barcode
@@ -20,6 +21,23 @@ enum class DetectorType(private val type: String) {
                 7 -> All
                 8 -> Selfie
                 9 -> None
+                else -> null
+            }
+        }
+
+        @JvmStatic
+        fun fromName(value: String?): DetectorType? {
+            return when (value) {
+                "barcode" -> Barcode
+                "digitalInk" -> DigitalInk
+                "face" -> Face
+                "image" -> Image
+                "object" -> Object
+                "pose" -> Pose
+                "text" -> Text
+                "all" -> All
+                "selfie" -> Selfie
+                "none" -> None
                 else -> null
             }
         }
