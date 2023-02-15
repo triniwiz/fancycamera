@@ -904,10 +904,14 @@ class Camera2 @JvmOverloads constructor(
             }
 
         camera = if (detectorType != DetectorType.None && isMLSupported) {
+            if (imageAnalysis == null) {
+                setUpAnalysis()
+            }
             cameraProvider?.bindToLifecycle(
                 context as LifecycleOwner,
                 selectorFromPosition(),
-                preview
+                preview,
+                imageAnalysis
             )
         } else {
             cameraProvider?.bindToLifecycle(
