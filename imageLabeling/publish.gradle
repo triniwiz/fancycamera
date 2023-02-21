@@ -12,7 +12,7 @@ allprojects {
     plugins.withId("com.vanniktech.maven.base") {
         group = "io.github.triniwiz.fancycamera"
         archivesBaseName = "imageLabeling"
-        version = "1.0.0"
+        version = "1.0.1"
 
         mavenPublishing {
             publishToMavenCentral("DEFAULT")
