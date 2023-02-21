@@ -211,6 +211,14 @@ class FancyCamera : FrameLayout {
             return cameraView.db
         }
 
+    var processEveryNthFrame: Int
+        get() {
+            return cameraView.processEveryNthFrame
+        }
+        set(value) {
+            cameraView.processEveryNthFrame = value
+        }
+
     constructor(context: Context) : super(context) {
         init(context, null)
     }
