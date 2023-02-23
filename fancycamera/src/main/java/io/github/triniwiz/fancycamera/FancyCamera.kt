@@ -289,7 +289,7 @@ class FancyCamera : FrameLayout {
 
     var faceDetectionOptions: Any?
         get() {
-            return cameraView.barcodeScannerOptions
+            return cameraView.faceDetectionOptions
         }
         set(value) {
             if (CameraBase.isFaceDetectionSupported) {
