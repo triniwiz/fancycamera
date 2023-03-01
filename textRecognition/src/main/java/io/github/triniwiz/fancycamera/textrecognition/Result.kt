@@ -47,7 +47,7 @@ class Result(instance: Text) {
         class Size(val width: Int,
                    val height: Int)
 
-        val origin = Origin(rect.left, rect.right)
+        val origin = Origin(rect.left, rect.top)
         val size = Size(rect.width(), rect.height())
     }
 
