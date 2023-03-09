@@ -404,7 +404,7 @@ class FancyCamera : FrameLayout {
     }
 
     fun hasStoragePermission(): Boolean {
-        return true;
+        return cameraView.hasStoragePermission()
     }
 
     fun requestStoragePermission() {
