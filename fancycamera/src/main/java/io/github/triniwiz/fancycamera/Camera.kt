@@ -81,6 +81,7 @@ class Camera @JvmOverloads constructor(
             }
             handleZoom()
         }
+    override var zoomRatio: Float = 1.0f
 
     override fun orientationUpdated() {
         camera?.let {
@@ -162,6 +163,7 @@ class Camera @JvmOverloads constructor(
                 scaleGestureDetector = null
             }
         }
+    override var enableTapToFocus: Boolean = false
 
     private var previewView: TextureView = TextureView(context, attrs, defStyleAttr)
 

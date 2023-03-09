@@ -49,6 +49,14 @@ class FancyCamera : FrameLayout {
             cameraView.enablePinchZoom = value
         }
 
+    var enableTapToFocus: Boolean
+        get() {
+            return cameraView.enableTapToFocus
+        }
+        set(value) {
+            cameraView.enableTapToFocus = value
+        }
+
     var retrieveLatestImage: Boolean
         get() {
             return cameraView.retrieveLatestImage
@@ -396,7 +404,7 @@ class FancyCamera : FrameLayout {
     }
 
     fun hasStoragePermission(): Boolean {
-        return cameraView.hasStoragePermission()
+        return true;
     }
 
     fun requestStoragePermission() {
