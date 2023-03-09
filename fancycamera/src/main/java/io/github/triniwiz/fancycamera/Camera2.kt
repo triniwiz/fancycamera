@@ -69,7 +69,11 @@ class Camera2 @JvmOverloads constructor(
     private var recording: Recording? = null
     private var pendingAutoFocus = false
     private var lastZoomRatio = 1.0f
-    private var autoFocusTimer = Timer("autoFocusTimer")
+    private var autoFocusTimer: Timer? = null
+
+    override var enablePinchZoom: Boolean = true
+    override var enableTapToFocus: Boolean = true
+
     override var retrieveLatestImage: Boolean = false
         set(value) {
             field = value
@@ -505,6 +509,12 @@ class Camera2 @JvmOverloads constructor(
         return actions
     }
 
+    private fun cancelAndDisposeFocusTimer() {
+        autoFocusTimer?.cancel()
+        autoFocusTimer?.purge()
+        autoFocusTimer = null
+    }
+
     private fun setupGestureListeners() {
         val listener =
             object : ScaleGestureDetector.SimpleOnScaleGestureListener(), GestureDetector.OnGestureListener {
@@ -523,9 +533,7 @@ class Camera2 @JvmOverloads constructor(
                 override fun onShowPress(p0: MotionEvent) = Unit
 
                 override fun onSingleTapUp(event: MotionEvent): Boolean {
-                    val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
-                        previewView.width.toFloat(), previewView.height.toFloat()
-                    )
+                    val factory: MeteringPointFactory = previewView.meteringPointFactory
                     val autoFocusPoint = factory.createPoint(event.x, event.y)
                     try {
                         camera?.cameraControl?.cancelFocusAndMetering()
@@ -538,7 +546,9 @@ class Camera2 @JvmOverloads constructor(
                                 disableAutoCancel()
                             }.build()
                         )
-                        autoFocusTimer.schedule(object : TimerTask() {
+                        cancelAndDisposeFocusTimer()
+                        autoFocusTimer = Timer("autoFocusTimer")
+                        autoFocusTimer?.schedule(object : TimerTask() {
                             override fun run() {
                                 handleAutoFocus()
                             }
@@ -575,9 +585,6 @@ class Camera2 @JvmOverloads constructor(
             true
         }
     }
-
-    override var enablePinchZoom: Boolean = true
-    override var enableTapToFocus: Boolean = false
 
 
     init {
@@ -1070,7 +1077,7 @@ class Camera2 @JvmOverloads constructor(
         if (pause) {
             return
         }
-        autoFocusTimer.cancel()
+        cancelAndDisposeFocusTimer()
         if (!hasCameraPermission()) return
         cachedPictureRatioSizeMap.clear()
         cachedPreviewRatioSizeMap.clear()
@@ -1684,7 +1691,7 @@ class Camera2 @JvmOverloads constructor(
 
 
     override fun release() {
-        autoFocusTimer.cancel()
+        cancelAndDisposeFocusTimer()
         if (!isForceStopping) {
             if (isRecording) {
                 isForceStopping = true
