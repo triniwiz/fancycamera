@@ -6,13 +6,14 @@ import android.content.Context
 import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
-import android.media.CamcorderProfile
 import android.media.Image
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.Surface
 import androidx.annotation.RequiresApi
@@ -25,12 +26,9 @@ import androidx.camera.video.*
 import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
-import androidx.core.util.Consumer
+import androidx.core.view.GestureDetectorCompat
 import androidx.exifinterface.media.ExifInterface
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.OnLifecycleEvent
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
 import com.google.android.gms.tasks.Tasks
@@ -44,9 +42,9 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.math.min
 
 
+@SuppressLint("UnsafeOptInUsageError")
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 class Camera2 @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
@@ -68,8 +66,10 @@ class Camera2 @JvmOverloads constructor(
     private var isForceStopping = false
     private var mLock = Any()
     private var cameraManager: CameraManager? = null
-    private var scaleGestureDetector: ScaleGestureDetector? = null
     private var recording: Recording? = null
+    private var pendingAutoFocus = false
+    private var lastZoomRatio = 1.0f
+    private var autoFocusTimer = Timer("autoFocusTimer")
     override var retrieveLatestImage: Boolean = false
         set(value) {
             field = value
@@ -89,9 +89,24 @@ class Camera2 @JvmOverloads constructor(
         }
 
     private fun handleZoom() {
-        camera?.cameraControl?.setLinearZoom(
-            zoom
-        )
+        // here we set the zoom once
+        // handles the case where: user changes the zoom before camera is ready, apply it when camera ready
+        // user changes zoom after camera is ready, this will trigger on the zoom setter
+        camera?.cameraControl?.let {
+            var zoomChanged = true;
+            if (storedZoom > 0) {
+                it.setLinearZoom(storedZoom)
+                storedZoom = -1f
+            } else if(storedZoomRatio > 0) {
+                it.setZoomRatio(storedZoomRatio)
+                storedZoomRatio = -1f
+            } else {
+                zoomChanged = false;
+            }
+            if (zoomChanged) {
+                onZoomChange()
+            }
+        }
     }
 
 
@@ -99,9 +114,25 @@ class Camera2 @JvmOverloads constructor(
         get() {
             return previewView
         }
-    override var zoom: Float = 0.0F
+    val maxZoomRatio: Float
+        get() = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f;
+    val minZoomRatio: Float
+        get() = camera?.cameraInfo?.zoomState?.value?.minZoomRatio ?: 1f;
+    var storedZoomRatio: Float = -1F;
+    override var zoomRatio: Float
+        get() = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
         set(value) {
-            field = when {
+            storedZoomRatio = value
+            storedZoom = -1f
+            handleZoom()
+        }
+
+    var storedZoom: Float = -1.0F
+
+    override var zoom: Float
+        get() = camera?.cameraInfo?.zoomState?.value?.linearZoom ?: ( if (storedZoom < 0) 0.0f else storedZoom)
+        set(value) {
+            storedZoom = when {
                 value > 1 -> {
                     1f
                 }
@@ -112,6 +143,7 @@ class Camera2 @JvmOverloads constructor(
                     value
                 }
             }
+            storedZoomRatio = -1f
             handleZoom()
         }
     override var whiteBalance: WhiteBalance = WhiteBalance.Auto
@@ -465,62 +497,93 @@ class Camera2 @JvmOverloads constructor(
         return returnTask.task
     }
 
-    private fun handlePinchZoom() {
-        if (!enablePinchZoom) {
-            return
+    private fun getFocusMeteringActions(): Int {
+        var actions = FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+        if (whiteBalance == WhiteBalance.Auto) {
+            actions = actions or FocusMeteringAction.FLAG_AWB
         }
-        val listener: ScaleGestureDetector.SimpleOnScaleGestureListener =
-            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        return actions
+    }
+
+    private fun setupGestureListeners() {
+        val listener =
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener(), GestureDetector.OnGestureListener {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
                     camera?.cameraInfo?.zoomState?.value?.let { zoomState ->
                         camera?.cameraControl?.setZoomRatio(
                             detector.scaleFactor * zoomState.zoomRatio
                         )
+                        onZoomChange()
                     }
                     return true
                 }
+
+                override fun onDown(p0: MotionEvent): Boolean = false
+
+                override fun onShowPress(p0: MotionEvent) = Unit
+
+                override fun onSingleTapUp(event: MotionEvent): Boolean {
+                    val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
+                        previewView.width.toFloat(), previewView.height.toFloat()
+                    )
+                    val autoFocusPoint = factory.createPoint(event.x, event.y)
+                    try {
+                        camera?.cameraControl?.cancelFocusAndMetering()
+                        camera?.cameraControl?.startFocusAndMetering(
+                            FocusMeteringAction.Builder(
+                                autoFocusPoint,
+                                getFocusMeteringActions()
+                            ).apply {
+                                //focus only when the user tap the preview
+                                disableAutoCancel()
+                            }.build()
+                        )
+                        autoFocusTimer.schedule(object : TimerTask() {
+                            override fun run() {
+                                handleAutoFocus()
+                            }
+                        }, 5000)
+                    } catch (e: CameraInfoUnavailableException) {
+                        Log.d("ERROR", "cannot access camera", e)
+                    }
+                    return true
+                }
+
+                override fun onScroll(
+                    p0: MotionEvent,
+                    p1: MotionEvent,
+                    p2: Float,
+                    p3: Float
+                ): Boolean  = false
+
+                override fun onLongPress(p0: MotionEvent) = Unit
+
+                override fun onFling(
+                    p0: MotionEvent,
+                    p1: MotionEvent,
+                    p2: Float,
+                    p3: Float
+                ): Boolean = false
+
             }
-        scaleGestureDetector = ScaleGestureDetector(context, listener)
+        val scaleGestureDetector = ScaleGestureDetector(context, listener)
+        val gestureDetectorCompat = GestureDetectorCompat(context, listener)
         previewView.setOnTouchListener { view, event ->
-            scaleGestureDetector?.onTouchEvent(event)
+            if (enablePinchZoom) scaleGestureDetector.onTouchEvent(event)
+            if (enableTapToFocus) gestureDetectorCompat.onTouchEvent(event)
             view.performClick()
             true
         }
     }
 
     override var enablePinchZoom: Boolean = true
-        set(value) {
-            field = value
-            if (value) {
-                handlePinchZoom()
-            } else {
-                scaleGestureDetector = null
-            }
-        }
+    override var enableTapToFocus: Boolean = false
 
 
     init {
-        handlePinchZoom()
+        setupGestureListeners()
         previewView.afterMeasured {
-            if (autoFocus) {
-                val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
-                    previewView.width.toFloat(), previewView.height.toFloat()
-                )
-                val centerWidth = previewView.width.toFloat() / 2
-                val centerHeight = previewView.height.toFloat() / 2
-                val autoFocusPoint = factory.createPoint(centerWidth, centerHeight)
-                try {
-                    camera?.cameraControl?.startFocusAndMetering(
-                        FocusMeteringAction.Builder(
-                            autoFocusPoint,
-                            FocusMeteringAction.FLAG_AF
-                        ).apply {
-                            setAutoCancelDuration(2, TimeUnit.SECONDS)
-                        }.build()
-                    )
-                } catch (_: CameraInfoUnavailableException) {
-                }
-            }
+            handleAutoFocus()
         }
         addView(previewView)
         detectSupport()
@@ -538,6 +601,35 @@ class Camera2 @JvmOverloads constructor(
                 isStarted = false
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun handleAutoFocus() {
+        if (camera?.cameraControl == null) {
+            pendingAutoFocus = true
+            return;
+        }
+        pendingAutoFocus = false;
+        if (autoFocus) {
+            val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
+                previewView.width.toFloat(), previewView.height.toFloat()
+            )
+            val centerWidth = previewView.width.toFloat() / 2
+            val centerHeight = previewView.height.toFloat() / 2
+            val autoFocusPoint = factory.createPoint(centerWidth, centerHeight)
+            try {
+                val action =FocusMeteringAction.Builder(
+                    autoFocusPoint,
+                    getFocusMeteringActions()
+                ).apply {
+                    setAutoCancelDuration(2, TimeUnit.SECONDS)
+                }.build();
+                val supported = camera?.cameraInfo?.isFocusMeteringSupported(action)
+                camera?.cameraControl?.startFocusAndMetering(
+                    action
+                )
+            } catch (_: CameraInfoUnavailableException) {
+            }
+        }
     }
 
     override var allowExifRotation: Boolean = true
@@ -575,6 +667,7 @@ class Camera2 @JvmOverloads constructor(
                             selectorFromPosition(),
                             imageAnalysis
                         )
+                        handleAutoFocus()
                     }
                 }
             }
@@ -594,6 +687,7 @@ class Camera2 @JvmOverloads constructor(
         }
 
     private fun getFlashMode(): Int {
+        var test = camera?.cameraInfo?.hasFlashUnit();
         return when (flashMode) {
             CameraFlashMode.AUTO -> ImageCapture.FLASH_MODE_AUTO
             CameraFlashMode.ON -> ImageCapture.FLASH_MODE_ON
@@ -871,6 +965,11 @@ class Camera2 @JvmOverloads constructor(
             }
         }
 
+        // handle ultra wide af mode
+        if (camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1.0f < 1.0f) {
+            extender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+        }
+
         imageCapture = builder.build()
 
         if (wasBounded || autoBound) {
@@ -888,7 +987,7 @@ class Camera2 @JvmOverloads constructor(
     }
 
     private fun initPreview() {
-        preview = Preview.Builder()
+        val previewBuilder = Preview.Builder()
             .apply {
                 setTargetAspectRatio(
                     when (displayRatio) {
@@ -897,10 +996,13 @@ class Camera2 @JvmOverloads constructor(
                     }
                 )
             }
+        preview = previewBuilder
             .build()
             .also {
                 it.setSurfaceProvider(this.previewView.surfaceProvider)
             }
+
+
 
         camera = if (detectorType != DetectorType.None && isMLSupported) {
             if (imageAnalysis == null) {
@@ -918,6 +1020,9 @@ class Camera2 @JvmOverloads constructor(
                 selectorFromPosition(),
                 preview
             )
+        }
+        if(pendingAutoFocus) {
+            handleAutoFocus()
         }
 
         listener?.onReady()
@@ -965,6 +1070,7 @@ class Camera2 @JvmOverloads constructor(
         if (pause) {
             return
         }
+        autoFocusTimer.cancel()
         if (!hasCameraPermission()) return
         cachedPictureRatioSizeMap.clear()
         cachedPreviewRatioSizeMap.clear()
@@ -1046,6 +1152,7 @@ class Camera2 @JvmOverloads constructor(
         set(value) {
             field = value
             camera?.let {
+                var test = camera?.cameraInfo?.hasFlashUnit()
                 when (value) {
                     CameraFlashMode.OFF -> {
                         it.cameraControl.enableTorch(false)
@@ -1058,6 +1165,16 @@ class Camera2 @JvmOverloads constructor(
                 }
             }
         }
+
+    private fun onZoomChange() {
+        val currentZoomRatio = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1.0f
+        if (lastZoomRatio == currentZoomRatio || lastZoomRatio < 1.0f && currentZoomRatio < 1.0f || lastZoomRatio >= 1.0f && currentZoomRatio >= 1.0f) {
+            return
+        }
+        lastZoomRatio = currentZoomRatio
+        updateImageCapture()
+        return
+    }
 
     @SuppressLint("RestrictedApi")
     override fun startRecording() {
@@ -1567,6 +1684,7 @@ class Camera2 @JvmOverloads constructor(
 
 
     override fun release() {
+        autoFocusTimer.cancel()
         if (!isForceStopping) {
             if (isRecording) {
                 isForceStopping = true

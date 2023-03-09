@@ -10,7 +10,7 @@
     <io.github.triniwiz.fancycamera.FancyCamera
         android:id="@+id/PhotoView"
         android:layout_width="match_parent"
-        android:layout_height="174dp"
+        android:layout_height="400dp"
         app:fcCameraPosition="front" />
 
 

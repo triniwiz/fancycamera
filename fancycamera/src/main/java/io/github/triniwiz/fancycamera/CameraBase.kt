@@ -67,7 +67,9 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract var displayRatio: String
     abstract var pictureSize: String
     abstract var enablePinchZoom: Boolean
+    abstract var enableTapToFocus: Boolean
     abstract var zoom: Float
+    abstract var zoomRatio: Float
     internal var onBarcodeScanningListener: ImageAnalysisCallback? = null
     internal var onFacesDetectedListener: ImageAnalysisCallback? = null
     internal var onImageLabelingListener: ImageAnalysisCallback? = null
