@@ -27,7 +27,7 @@ android {
 
 
 dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+//    implementation fileTree(dir: 'libs', include: ['*.jar'])
     api "androidx.appcompat:appcompat:$app_compat_version"
     implementation 'com.google.mlkit:vision-common:17.3.0'
     implementation 'androidx.databinding:databinding-runtime:8.3.2'
