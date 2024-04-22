@@ -15,11 +15,12 @@ import android.view.OrientationEventListener
 import android.widget.FrameLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.databinding.ObservableArrayList
+import androidx.databinding.ObservableList
 import java.io.IOException
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.Executors
 
 
 abstract class CameraBase @JvmOverloads constructor(
@@ -49,9 +50,10 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract val amplitudeEMA: Double
     abstract var isAudioLevelsEnabled: Boolean
     abstract val numberOfCameras: Int
-    abstract var detectorType: DetectorType
     var overridePhotoWidth: Int = -1
     var overridePhotoHeight: Int = -1
+    abstract val imageProcessors: ObservableList<ImageProcessor<*>>
+    abstract var defaultLens: CameraLens
     abstract fun stop()
     abstract fun release()
     abstract fun startPreview()
@@ -145,106 +147,6 @@ abstract class CameraBase @JvmOverloads constructor(
     abstract val previewSurface: Any
 
     internal val mainHandler = Handler(Looper.getMainLooper())
-    internal var analysisExecutor = Executors.newCachedThreadPool()
-
-    internal var barcodeScannerOptions: Any? = null
-    fun setBarcodeScannerOptions(value: Any) {
-        if (!isBarcodeScanningSupported) return
-        if (barcodeScannerOptions != null) {
-            val BarcodeScannerOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
-            if (!BarcodeScannerOptionsClazz.isInstance(value)) return
-            barcodeScannerOptions = value
-        }
-    }
-
-
-    internal var faceDetectionOptions: Any? = null
-    fun setFaceDetectionOptions(value: Any) {
-        if (!isFaceDetectionSupported) return
-        if (faceDetectionOptions != null) {
-            val FaceDetectionOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
-            if (!FaceDetectionOptionsClazz.isInstance(value)) return
-            faceDetectionOptions = value
-        }
-    }
-
-    internal var imageLabelingOptions: Any? = null
-    fun setImageLabelingOptions(value: Any) {
-        if (!isImageLabelingSupported) return
-        if (imageLabelingOptions != null) {
-            val ImageLabelingOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
-            if (!ImageLabelingOptionsClazz.isInstance(value)) return
-            imageLabelingOptions = value
-        }
-    }
-
-    internal var objectDetectionOptions: Any? = null
-    fun setObjectDetectionOptions(value: Any) {
-        if (!isObjectDetectionSupported) return
-        if (objectDetectionOptions != null) {
-            val ObjectDetectionOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
-            if (!ObjectDetectionOptionsClazz.isInstance(value)) return
-            objectDetectionOptions = value
-        }
-    }
-
-    internal var selfieSegmentationOptions: Any? = null
-    fun setSelfieSegmentationOptions(value: Any) {
-        if (!isSelfieSegmentationSupported) return
-        if (selfieSegmentationOptions != null) {
-            val SelfieSegmentationOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
-            if (!SelfieSegmentationOptionsClazz.isInstance(value)) return
-            selfieSegmentationOptions = value
-        }
-    }
-
-    internal fun initOptions() {
-        if (isBarcodeScanningSupported) {
-            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
-            val BarcodeScannerOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
-            barcodeScannerOptions = BarcodeScannerOptionsClazz.newInstance()
-        }
-
-
-        if (isFaceDetectionSupported) {
-            val FaceDetectionOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
-            faceDetectionOptions = FaceDetectionOptionsClazz.newInstance()
-        }
-
-        if (isImageLabelingSupported) {
-            val ImageLabelingOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
-            imageLabelingOptions = ImageLabelingOptionsClazz.newInstance()
-        }
-
-        if (isPoseDetectionSupported) {
-            // noop
-        }
-
-
-        if (isObjectDetectionSupported) {
-            val ObjectDetectionOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
-            objectDetectionOptions = ObjectDetectionOptionsClazz.newInstance()
-        }
-
-        if (isSelfieSegmentationSupported) {
-            val SelfieSegmentationOptionsClazz =
-                Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
-            selfieSegmentationOptions = SelfieSegmentationOptionsClazz.newInstance()
-        }
-
-        if (isTextRecognitionSupported) {
-            // noop
-        }
-    }
 
 
     /** Device orientation in degrees 0-359 */
@@ -267,7 +169,11 @@ abstract class CameraBase @JvmOverloads constructor(
             return mDuration
         }
 
-    internal var recorder: MediaRecorder = MediaRecorder()
+    internal var recorder: MediaRecorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        MediaRecorder(context)
+    } else {
+        MediaRecorder()
+    }
 
     internal var listener: CameraEventListener? = null
 
@@ -338,8 +244,8 @@ abstract class CameraBase @JvmOverloads constructor(
                 recorder.start()
                 isGettingAudioLevels = true
                 mEMA = 0.0
-            } catch (e: IOException) {
-            } catch (e: Exception) {
+            } catch (_: IOException) {
+            } catch (_: Exception) {
             }
 
         }
@@ -486,74 +392,5 @@ abstract class CameraBase @JvmOverloads constructor(
 
     companion object {
         internal val EMA_FILTER = 0.6
-        internal var isBarcodeScanningSupported = false
-        internal var isFaceDetectionSupported = false
-        internal var isImageLabelingSupported = false
-        internal var isObjectDetectionSupported = false
-        internal var isPoseDetectionSupported = false
-        internal var isTextRecognitionSupported = false
-        internal var isSelfieSegmentationSupported = false
-        internal val isMLSupported: Boolean
-            get() {
-                return isFaceDetectionSupported || isTextRecognitionSupported || isBarcodeScanningSupported ||
-                        isPoseDetectionSupported || isImageLabelingSupported || isObjectDetectionSupported
-            }
-
-        internal fun detectSupport() {
-            isBarcodeScanningSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-            isFaceDetectionSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-            isImageLabelingSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-            isPoseDetectionSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.posedetection.PoseDetection")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-            isObjectDetectionSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-            isSelfieSegmentationSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-
-            isTextRecognitionSupported = try {
-                Class.forName("io.github.triniwiz.fancycamera.textrecognition.TextRecognition")
-                true
-            } catch (e: ClassNotFoundException) {
-                false
-            }
-
-        }
-
-        init {
-            detectSupport()
-        }
     }
 }

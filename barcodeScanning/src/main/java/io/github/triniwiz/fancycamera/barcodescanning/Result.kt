@@ -119,8 +119,10 @@ class Result(barcode: Barcode) {
     }
 
 
-    class CalenderEvent(event:
-                        Barcode.CalendarEvent) {
+    class CalenderEvent(
+        event:
+        Barcode.CalendarEvent
+    ) {
         val description = event.description
         val location = event.location
         val organizer = event.organizer
@@ -158,7 +160,7 @@ class Result(barcode: Barcode) {
             val addressList = mutableListOf<Address>()
             for (address in info.addresses) {
                 addressList.add(
-                        Address(address)
+                    Address(address)
                 )
             }
             addresses = addressList.toTypedArray()
@@ -187,13 +189,14 @@ class Result(barcode: Barcode) {
     }
 
     class Bounds(rect: Rect) {
-        class Origin(val x: Int, val y: Int)
-        class Size(val width: Int,
-                   val height: Int)
 
-        val origin = Origin(rect.left, rect.top)
-        val size = Size(rect.width(), rect.height())
+        val x: Int = rect.left
 
+        val y: Int = rect.top
+
+        val width: Int = rect.width()
+
+        val height: Int = rect.height()
     }
 
     class Point(point: android.graphics.Point) {
@@ -259,6 +262,6 @@ class Result(barcode: Barcode) {
         }
         this.points = points.toTypedArray()
         format = BarcodeScanner.BarcodeFormat.fromBarcode(barcode.format)
-                ?: BarcodeScanner.BarcodeFormat.ALL
+            ?: BarcodeScanner.BarcodeFormat.ALL
     }
 }

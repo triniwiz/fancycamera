@@ -1,22 +1,25 @@
 package io.github.triniwiz.fancycamera.barcodescanning
 
 import android.graphics.Bitmap
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
+import android.media.Image
+import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import io.github.triniwiz.fancycamera.ImageProcessor
 import org.json.JSONObject
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
-class BarcodeScanner {
-    private var executor: ExecutorService = Executors.newSingleThreadExecutor()
 
-    fun processImage(image: InputImage, options: Options): Task<String> {
-        val task = TaskCompletionSource<String>()
+class BarcodeScanner : ImageProcessor<String> {
+    var options = Options()
+    override val type: Int = 0
+    override fun process(image: InputImage): FutureTask<String> {
         val opts = BarcodeScannerOptions.Builder()
+
         if (options.barcodeFormat.isEmpty()) {
             opts.setBarcodeFormats(BarcodeFormat.ALL.format)
         } else {
@@ -33,60 +36,95 @@ class BarcodeScanner {
                 )
             }
         }
+
         val client = com.google.mlkit.vision.barcode.BarcodeScanning.getClient(opts.build())
         val gson = Gson()
-        client.process(image)
-            .addOnSuccessListener(executor) {
+
+        return FutureTask {
+            try {
+                val results = Tasks.await(client.process(image))
                 val result = mutableListOf<Result>()
-                for (barcode in it) {
+                for (barcode in results) {
                     result.add(Result(barcode))
                 }
-                val json = if (result.isNotEmpty()) {
+                if (result.isNotEmpty()) {
                     gson.toJson(result)
                 } else {
                     ""
                 }
-
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
                 client.close()
-                task.setResult(json)
             }
-            .addOnFailureListener(executor, {
-                task.setException(it)
-            })
-        return task.task
+        }
+
     }
 
-    fun processBytes(
+    override fun process(image: Image, rotation: Int): FutureTask<String> {
+        return process(InputImage.fromMediaImage(image, rotation))
+    }
+
+    override fun process(bitmap: Bitmap, rotation: Int): FutureTask<String> {
+        val input = InputImage.fromBitmap(bitmap, rotation)
+        return process(input)
+    }
+
+    override fun process(
         bytes: ByteArray,
         width: Int,
         height: Int,
         rotation: Int,
-        format: Int,
-        options: Options
-    ): Task<String> {
+        format: Int
+    ): FutureTask<String> {
         val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        return processImage(input, options)
+        return process(input)
     }
 
-    fun processBitmap(bitmap: Bitmap, rotation: Int, options: Options): Task<String> {
-        val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input, options)
-    }
 
     enum class BarcodeFormat(internal val format: Int) {
+        @SerializedName("all")
         ALL(Barcode.FORMAT_ALL_FORMATS),
+
+        @SerializedName("code_128")
         CODE_128(Barcode.FORMAT_CODE_128),
+
+        @SerializedName("code_39")
         CODE_39(Barcode.FORMAT_CODE_39),
+
+        @SerializedName("code_93")
         CODE_93(Barcode.FORMAT_CODE_93),
+
+        @SerializedName("codabar")
         CODABAR(Barcode.FORMAT_CODABAR),
+
+        @SerializedName("data_matrix")
         DATA_MATRIX(Barcode.FORMAT_DATA_MATRIX),
+
+        @SerializedName("ean_13")
         EAN_13(Barcode.FORMAT_EAN_13),
+
+        @SerializedName("ean_8")
         EAN_8(Barcode.FORMAT_EAN_8),
+
+        @SerializedName("itf")
         ITF(Barcode.FORMAT_ITF),
+
+        @SerializedName("qr_code")
         QR_CODE(Barcode.FORMAT_QR_CODE),
+
+        @SerializedName("upc_a")
         UPC_A(Barcode.FORMAT_UPC_A),
+
+        @SerializedName("upc_e")
         UPC_E(Barcode.FORMAT_UPC_E),
+
+        @SerializedName("pdf417")
         PDF417(Barcode.FORMAT_PDF417),
+
+        @SerializedName("aztec")
         AZTEC(Barcode.FORMAT_AZTEC);
 
         companion object {
@@ -101,6 +139,26 @@ class BarcodeScanner {
                 return bf
             }
         }
+
+        val value: String
+            get() {
+                return when (this) {
+                    ALL -> "all"
+                    CODE_128 -> "code_128"
+                    CODE_39 -> "code_39"
+                    CODE_93 -> "code_93"
+                    CODABAR -> "codabar"
+                    DATA_MATRIX -> "data_matrix"
+                    EAN_13 -> "ean_13"
+                    EAN_8 -> "ean_8"
+                    ITF -> "itf"
+                    QR_CODE -> "qr_code"
+                    UPC_A -> "upc_a"
+                    UPC_E -> "upc_e"
+                    PDF417 -> "pdf417"
+                    AZTEC -> "aztec"
+                }
+            }
 
     }
 
@@ -155,4 +213,5 @@ class BarcodeScanner {
             }
         }
     }
+
 }

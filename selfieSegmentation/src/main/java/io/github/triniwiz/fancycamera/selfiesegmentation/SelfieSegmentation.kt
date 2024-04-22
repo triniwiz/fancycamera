@@ -1,22 +1,24 @@
 package io.github.triniwiz.fancycamera.selfiesegmentation
 
 import android.graphics.Bitmap
-import android.util.Log
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.Segmentation
 import com.google.mlkit.vision.segmentation.SegmentationMask
-import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions;
+import com.google.mlkit.vision.segmentation.selfie.SelfieSegmenterOptions
+import io.github.triniwiz.fancycamera.ImageProcessor
 import org.json.JSONObject
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
-class SelfieSegmentation {
-    private var executor: ExecutorService = Executors.newSingleThreadExecutor()
+class SelfieSegmentation : ImageProcessor<SegmentationMask> {
+    var options = Options()
+    override val type: Int
+        get() = 5
+    private var onlySingleMode = false
 
-    fun processImage(image: InputImage, options: Options): Task<SegmentationMask> {
-        val task = TaskCompletionSource<SegmentationMask>()
+
+    override fun process(image: InputImage): FutureTask<SegmentationMask> {
         val opts = SelfieSegmenterOptions.Builder()
         if (options.singleMode) {
             opts.setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE)
@@ -28,34 +30,38 @@ class SelfieSegmentation {
         }
         opts.setStreamModeSmoothingRatio(options.smoothingRatio)
         val client = Segmentation.getClient(opts.build())
-        client.process(image)
-            .addOnCompleteListener(executor) {
+
+        return FutureTask {
+            try {
+                Tasks.await(client.process(image))
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
+                onlySingleMode = false
                 client.close()
-                task.setResult(it.result)
-            }.addOnFailureListener(executor) {
-                task.setException(it)
             }
-        return task.task
+        }
+
     }
 
-
-    fun processBytes(
+    override fun process(
         bytes: ByteArray,
         width: Int,
         height: Int,
         rotation: Int,
-        format: Int,
-        options: Options
-    ): Task<SegmentationMask> {
+        format: Int
+    ): FutureTask<SegmentationMask> {
+        onlySingleMode = true
         val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        options.singleMode = true
-        return processImage(input, options)
+        return process(input)
     }
 
-    fun processBitmap(bitmap: Bitmap, rotation: Int, options: Options): Task<SegmentationMask> {
-        options.singleMode = true
+    override fun process(bitmap: Bitmap, rotation: Int): FutureTask<SegmentationMask> {
+        onlySingleMode = true
         val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input, options)
+        return process(input)
     }
 
     class Options {

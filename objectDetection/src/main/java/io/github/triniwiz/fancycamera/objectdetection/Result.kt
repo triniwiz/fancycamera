@@ -64,11 +64,12 @@ class Result(detectedObject: DetectedObject) {
     }
 
     class Bounds(rect: Rect) {
-        class Origin(val x: Int, val y: Int)
-        class Size(val width: Int,
-                   val height: Int)
+        val x: Int = rect.left
 
-        val origin = Origin(rect.left, rect.top)
-        val size = Size(rect.width(), rect.height())
+        val y: Int = rect.top
+
+        val width: Int = rect.width()
+
+        val height: Int = rect.height()
     }
 }

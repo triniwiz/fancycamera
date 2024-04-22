@@ -14,6 +14,8 @@ import android.util.Log
 import android.view.ScaleGestureDetector
 import android.view.Surface
 import android.view.TextureView
+import androidx.databinding.ObservableArrayList
+import androidx.databinding.ObservableList
 import androidx.exifinterface.media.ExifInterface
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.TaskCompletionSource
@@ -24,6 +26,7 @@ import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
+import kotlin.collections.ArrayList
 import kotlin.math.ceil
 import kotlin.math.log10
 import kotlin.math.max
@@ -39,6 +42,7 @@ class Camera @JvmOverloads constructor(
     var isRecording = false
     var isForceStopping = false
     var isStarted = false
+    override var defaultLens: CameraLens = CameraLens.telephoto
     private fun handleZoom() {
         synchronized(lock) {
             if (camera != null) {
@@ -72,9 +76,11 @@ class Camera @JvmOverloads constructor(
                 value > 1 -> {
                     1f
                 }
+
                 value < 0 -> {
                     0f
                 }
+
                 else -> {
                     value
                 }
@@ -97,7 +103,6 @@ class Camera @JvmOverloads constructor(
             }
         }
     private var cameraExecutor = Executors.newSingleThreadExecutor()
-    private var imageAnalysisExecutor = Executors.newSingleThreadExecutor()
     override var displayRatio = "4:3"
         set(value) {
             if (cachedPreviewRatioSizeMap.containsKey(value)) {
@@ -167,343 +172,9 @@ class Camera @JvmOverloads constructor(
 
     private var previewView: TextureView = TextureView(context, attrs, defStyleAttr)
 
-    private fun handleBarcodeScanning(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isBarcodeScanningSupported || !(detectorType == DetectorType.Barcode || detectorType == DetectorType.All)) {
-            return null
-        }
-        val BarcodeScannerClazz =
-            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
-        val barcodeScanner = BarcodeScannerClazz.newInstance()
-        val BarcodeScannerOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
-
-        val processImageMethod = BarcodeScannerClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            BarcodeScannerOptionsClazz
-        )
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-
-        if (barcodeScannerOptions == null) {
-            barcodeScannerOptions = BarcodeScannerOptionsClazz.newInstance()
-        }
-
-        val task = processImageMethod.invoke(
-            barcodeScanner,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21,
-            barcodeScannerOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onBarcodeScanningListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onBarcodeScanningListener?.onError(
-                    it.message
-                        ?: "Failed to complete face detection.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handleFaceDetection(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
-            return null
-        }
-        val FaceDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection")
-        val faceDetection = FaceDetectionClazz.newInstance()
-        val FaceDetectionOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
-        val processBytesMethod = FaceDetectionClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            FaceDetectionOptionsClazz
-        )
-
-        if (faceDetectionOptions == null) {
-            faceDetectionOptions = FaceDetectionOptionsClazz.newInstance()
-        }
-
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            faceDetection,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21,
-            faceDetectionOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                onFacesDetectedListener?.onSuccess(it)
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            onFacesDetectedListener?.onError(
-                it.message
-                    ?: "Failed to complete face detection.", it
-            )
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handleImageLabeling(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isImageLabelingSupported || !(detectorType == DetectorType.Image || detectorType == DetectorType.All)) {
-            return null
-        }
-        val ImageLabelingClazz =
-            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
-        val imageLabeling = ImageLabelingClazz.newInstance()
-        val ImageLabelingOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
-        val processBytesMethod = ImageLabelingClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            ImageLabelingOptionsClazz
-        )
-        if (imageLabelingOptions == null) {
-            imageLabelingOptions = ImageLabelingOptionsClazz.newInstance()
-        }
-
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            imageLabeling,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21,
-            imageLabelingOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                onImageLabelingListener?.onSuccess(it)
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            onImageLabelingListener?.onError(
-                it.message
-                    ?: "Failed to complete face detection.", it
-            )
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handleObjectDetection(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isObjectDetectionSupported || !(detectorType == DetectorType.Object || detectorType == DetectorType.All)) {
-            return null
-        }
-        val ObjectDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection")
-        val objectDetection = ObjectDetectionClazz.newInstance()
-        val ObjectDetectionOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
-        val processBytesMethod = ObjectDetectionClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            ObjectDetectionOptionsClazz
-        )
-
-        if (objectDetectionOptions == null) {
-            objectDetectionOptions = ObjectDetectionOptionsClazz.newInstance()
-        }
-
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            objectDetection,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21,
-            objectDetectionOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                onObjectDetectedListener?.onSuccess(it)
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            onObjectDetectedListener?.onError(
-                it.message
-                    ?: "Failed to complete face detection.", it
-            )
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handlePoseDetection(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
-            return null
-        }
-        val PoseDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.posedetection.PoseDetection")
-        val poseDetection = PoseDetectionClazz.newInstance()
-        val processBytesMethod = PoseDetectionClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java
-        )
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            poseDetection,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                onPoseDetectedListener?.onSuccess(it)
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            onPoseDetectedListener?.onError(
-                it.message
-                    ?: "Failed to complete face detection.", it
-            )
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handleTextRecognition(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isTextRecognitionSupported || !(detectorType == DetectorType.Text || detectorType == DetectorType.All)) {
-            return null
-        }
-        val TextRecognitionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.textrecognition.TextRecognition")
-        val textRecognition = TextRecognitionClazz.newInstance()
-        val processBytesMethod = TextRecognitionClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java
-        )
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            textRecognition,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onTextRecognitionListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onTextRecognitionListener?.onError(
-                    it.message
-                        ?: "Failed to complete text recognition.", it
-                )
-            }
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    private fun handleSelfieSegmentation(data: ByteArray, camera: Camera): Task<Boolean>? {
-        if (!isSelfieSegmentationSupported || !(detectorType == DetectorType.Selfie || detectorType == DetectorType.All)) {
-            return null
-        }
-        val SelfieSegmentationClazz =
-            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation")
-        val selfieSegmentation = SelfieSegmentationClazz.newInstance()
-        val SelfieSegmentationOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
-        val processBytesMethod = SelfieSegmentationClazz.getDeclaredMethod(
-            "processBytes",
-            ByteArray::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            Int::class.java,
-            SelfieSegmentationOptionsClazz
-        )
-
-        if (selfieSegmentationOptions == null) {
-            selfieSegmentationOptions = SelfieSegmentationOptionsClazz.newInstance()
-        }
-
-        val previewSize = camera.parameters.previewSize
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processBytesMethod.invoke(
-            selfieSegmentation,
-            data,
-            previewSize.width,
-            previewSize.height,
-            rotationAngle,
-            ImageFormat.NV21,
-            selfieSegmentationOptions!!
-        ) as Task<Any?>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it != null) {
-                onImageLabelingListener?.onSuccess(it)
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            onImageLabelingListener?.onError(
-                it.message
-                    ?: "Failed to complete face detection.", it
-            )
-        }.addOnCompleteListener {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
     init {
         handlePinchZoom()
         addView(previewView)
-        detectSupport()
         previewView.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
             override fun onSurfaceTextureAvailable(
                 surface: SurfaceTexture,
@@ -543,12 +214,16 @@ class Camera @JvmOverloads constructor(
                 when (value) {
                     CameraFlashMode.OFF -> camera?.parameters?.flashMode =
                         Camera.Parameters.FLASH_MODE_OFF
+
                     CameraFlashMode.ON -> camera?.parameters?.flashMode =
                         Camera.Parameters.FLASH_MODE_ON
+
                     CameraFlashMode.AUTO -> camera?.parameters?.flashMode =
                         Camera.Parameters.FLASH_MODE_AUTO
+
                     CameraFlashMode.RED_EYE -> camera?.parameters?.flashMode =
                         Camera.Parameters.FLASH_MODE_RED_EYE
+
                     CameraFlashMode.TORCH -> camera?.parameters?.flashMode =
                         Camera.Parameters.FLASH_MODE_TORCH
                 }
@@ -556,7 +231,51 @@ class Camera @JvmOverloads constructor(
             }
         }
 
-    override var detectorType: DetectorType = DetectorType.None
+    override var imageProcessors: ObservableList<ImageProcessor<*>> =
+        ObservableArrayList<ImageProcessor<*>>()
+            .apply {
+                val callback: ObservableList.OnListChangedCallback<ObservableList<ImageProcessor<Any>>> =
+                    object :
+                        ObservableList.OnListChangedCallback<ObservableList<ImageProcessor<Any>>>() {
+                        override fun onChanged(sender: ObservableList<ImageProcessor<Any>>?) {}
+
+                        override fun onItemRangeChanged(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeInserted(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeMoved(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            fromPosition: Int,
+                            toPosition: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeRemoved(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            if (sender?.isEmpty() == true) {
+                            }
+                        }
+                    }
+                addOnListChangedCallback(callback)
+            }
+
 
     override var allowExifRotation: Boolean = true // TODO( Implement )
 
@@ -677,9 +396,9 @@ class Camera @JvmOverloads constructor(
                 }
 
                 if (key != null) {
-                    val list = cachedPictureRatioSizeMap.get(key)
+                    val list = cachedPictureRatioSizeMap[key]
                     if (list == null) {
-                        cachedPictureRatioSizeMap.put(key, mutableListOf(value))
+                        cachedPictureRatioSizeMap[key] = mutableListOf(value)
                     } else {
                         list.add(value)
                     }
@@ -717,36 +436,43 @@ class Camera @JvmOverloads constructor(
                     WhiteBalance.Auto -> {
                         parameters.whiteBalance = WhiteBalance.Auto.value
                     }
+
                     WhiteBalance.Sunny -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Sunny.value)) {
                             parameters.whiteBalance = WhiteBalance.Sunny.value
                         }
                     }
+
                     WhiteBalance.Cloudy -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Cloudy.value)) {
                             parameters.whiteBalance = WhiteBalance.Cloudy.value
                         }
                     }
+
                     WhiteBalance.Shadow -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Shadow.value)) {
                             parameters.whiteBalance = WhiteBalance.Shadow.value
                         }
                     }
+
                     WhiteBalance.Twilight -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Twilight.value)) {
                             parameters.whiteBalance = WhiteBalance.Twilight.value
                         }
                     }
+
                     WhiteBalance.Fluorescent -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Fluorescent.value)) {
                             parameters.whiteBalance = WhiteBalance.Fluorescent.value
                         }
                     }
+
                     WhiteBalance.Incandescent -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.Incandescent.value)) {
                             parameters.whiteBalance = WhiteBalance.Incandescent.value
                         }
                     }
+
                     WhiteBalance.WarmFluorescent -> {
                         if (supportedWhiteBalance.contains(WhiteBalance.WarmFluorescent.value)) {
                             parameters.whiteBalance = WhiteBalance.WarmFluorescent.value
@@ -756,7 +482,8 @@ class Camera @JvmOverloads constructor(
             }
             val pictureSize = stringSizeToSize(pictureSize)
             val previewSize = cachedPreviewRatioSizeMap[displayRatio]?.get(0) ?: Size(0, 0)
-            if (isMLSupported) {
+
+            if (imageProcessors.isNotEmpty()) {
                 parameters?.setPreviewSize(previewSize.width, previewSize.height)
                 parameters?.setPictureSize(pictureSize.width, pictureSize.height)
                 parameters?.previewFormat = ImageFormat.NV21
@@ -765,8 +492,22 @@ class Camera @JvmOverloads constructor(
                 camera?.addCallbackBuffer(previewBuffer!!.array())
                 camera?.setPreviewCallbackWithBuffer { data, camera ->
                     if (data != null) {
-                        if (currentFrame != processEveryNthFrame) {
+                        if (currentFrame < processEveryNthFrame) {
                             incrementCurrentFrame()
+
+                            try {
+                                val size = camera.parameters.previewSize
+                                camera.addCallbackBuffer(
+                                    createPreviewBuffer(
+                                        Size(
+                                            size.width,
+                                            size.height
+                                        )
+                                    )
+                                )
+                            } catch (_: Exception) {
+                            }
+
                             return@setPreviewCallbackWithBuffer
                         }
 
@@ -780,53 +521,117 @@ class Camera @JvmOverloads constructor(
                             )
                         }
 
-                        Log.d("com.test", "setPreviewCallbackWithBuffer : ${data.size}")
 
+                        if (imageProcessors.isNotEmpty()) {
+                            cameraExecutor.execute {
+                                for (processor in imageProcessors) {
+                                    val process = processor.process(
+                                        data,
+                                        camera.parameters.previewSize.width,
+                                        camera.parameters.previewSize.height,
+                                        rotationAngle,
+                                        ImageFormat.NV21
+                                    )
+                                    try {
+                                        process.run()
+                                        val result = process.get()
 
-                        val tasks = mutableListOf<Task<*>>()
-                        //BarcodeScanner
-                        val barcodeTask = handleBarcodeScanning(data, camera)
-                        if (barcodeTask != null) {
-                            tasks.add(barcodeTask)
-                        }
-                        // FaceDetection
-                        val faceTask = handleFaceDetection(data, camera)
-                        if (faceTask != null) {
-                            tasks.add(faceTask)
-                        }
+                                        if ((0..6).contains(processor.type) && result is String && result.isEmpty()) {
+                                            continue
+                                        }
 
-                        //ImageLabeling
-                        val imageTask = handleImageLabeling(data, camera)
-                        if (imageTask != null) {
-                            tasks.add(imageTask)
-                        }
+                                        if (result != null) {
+                                            when (processor.type) {
+                                                0 -> {
+                                                    onBarcodeScanningListener?.onSuccess(result)
+                                                }
 
-                        //ObjectDetection
-                        val objectTask = handleObjectDetection(data, camera)
-                        if (objectTask != null) {
-                            tasks.add(objectTask)
-                        }
+                                                1 -> {
+                                                    onFacesDetectedListener?.onSuccess(result)
+                                                }
 
-                        //PoseDetection
-                        val poseTask = handlePoseDetection(data, camera)
-                        if (poseTask != null) {
-                            tasks.add(poseTask)
-                        }
+                                                2 -> {
+                                                    onImageLabelingListener?.onSuccess(result)
+                                                }
 
-                        // TextRecognition
-                        val textTask = handleTextRecognition(data, camera)
-                        if (textTask != null) {
-                            tasks.add(textTask)
-                        }
+                                                3 -> {
+                                                    onObjectDetectedListener?.onSuccess(result)
+                                                }
 
-                        // SelfieSegmentation
-                        val selfieTask = handleSelfieSegmentation(data, camera)
-                        if (selfieTask != null) {
-                            tasks.add(selfieTask)
-                        }
+                                                4 -> {
+                                                    onPoseDetectedListener?.onSuccess(result)
+                                                }
 
-                        if (tasks.isNotEmpty()) {
-                            Tasks.whenAllComplete(tasks).addOnCompleteListener {
+                                                5 -> {
+                                                    onSelfieSegmentationListener?.onSuccess(result)
+                                                }
+
+                                                6 -> {
+                                                    onTextRecognitionListener?.onSuccess(result)
+                                                }
+
+                                                else -> {}
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        when (processor.type) {
+                                            0 -> {
+                                                onBarcodeScanningListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete barcode scanning.", e
+                                                )
+                                            }
+
+                                            1 -> {
+                                                onFacesDetectedListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete face detection.", e
+                                                )
+                                            }
+
+                                            2 -> {
+                                                onImageLabelingListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete image label detection.",
+                                                    e
+                                                )
+                                            }
+
+                                            3 -> {
+                                                onObjectDetectedListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete object detection.", e
+                                                )
+                                            }
+
+                                            4 -> {
+                                                onPoseDetectedListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete pose detection.", e
+                                                )
+                                            }
+
+                                            5 -> {
+                                                onSelfieSegmentationListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete selfie segmentation detection.",
+                                                    e
+                                                )
+                                            }
+
+                                            6 -> {
+                                                onTextRecognitionListener?.onError(
+                                                    e.message
+                                                        ?: "Failed to complete selfie text recognition.",
+                                                    e
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            cameraExecutor.execute {
                                 try {
                                     val size = camera.parameters.previewSize
                                     camera.addCallbackBuffer(
@@ -837,11 +642,13 @@ class Camera @JvmOverloads constructor(
                                             )
                                         )
                                     )
-                                } catch (e: java.lang.Exception) {
+                                } catch (_: Exception) {
                                 } finally {
                                     resetCurrentFrame()
                                 }
                             }
+                        } else {
+                            resetCurrentFrame()
                         }
                     }
                 }
@@ -970,9 +777,11 @@ class Camera @JvmOverloads constructor(
                                     1 -> {
                                         orientation = 2
                                     }
+
                                     3 -> {
                                         orientation = 4
                                     }
+
                                     6 -> {
                                         orientation = 7
                                     }
@@ -981,21 +790,25 @@ class Camera @JvmOverloads constructor(
                             when (orientation) {
                                 1 -> {
                                 }
+
                                 2 -> matrix.postScale(-1f, 1f)
                                 3 -> matrix.postRotate(180f)
                                 4 -> {
                                     matrix.postRotate(180f)
                                     matrix.postScale(-1f, 1f)
                                 }
+
                                 5 -> {
                                     matrix.postRotate(90f)
                                     matrix.postScale(-1f, 1f)
                                 }
+
                                 6 -> matrix.postRotate(90f)
                                 7 -> {
                                     matrix.postRotate(270f)
                                     matrix.postScale(-1f, 1f)
                                 }
+
                                 8 -> matrix.postRotate(270f)
                             }
 
@@ -1151,6 +964,7 @@ class Camera @JvmOverloads constructor(
                                 "Server died",
                                 java.lang.Exception("Server died")
                             )
+
                             MediaRecorder.MEDIA_RECORDER_ERROR_UNKNOWN -> listener?.onCameraError(
                                 "Unknown",
                                 java.lang.Exception("Unknown")

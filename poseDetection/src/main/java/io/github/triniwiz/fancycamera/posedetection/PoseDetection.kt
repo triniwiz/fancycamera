@@ -1,55 +1,65 @@
 package io.github.triniwiz.fancycamera.posedetection
 
 import android.graphics.Bitmap
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.pose.defaults.PoseDetectorOptions
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import io.github.triniwiz.fancycamera.ImageProcessor
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
-class PoseDetection {
-    private var executor: ExecutorService = Executors.newSingleThreadExecutor()
+class PoseDetection : ImageProcessor<String> {
     var singleMode = false
-    fun processImage(image: InputImage): Task<String> {
-        val task = TaskCompletionSource<String>()
+    private val gson = Gson()
+    private var onlySingleMode = false
+    override val type: Int
+        get() = 4
+    override fun process(image: InputImage): FutureTask<String> {
         val opts = PoseDetectorOptions.Builder()
-        if (singleMode) {
+        if (singleMode || onlySingleMode) {
             opts.setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE)
         } else {
             opts.setDetectorMode(PoseDetectorOptions.STREAM_MODE)
         }
         val client = com.google.mlkit.vision.pose.PoseDetection.getClient(opts.build())
-        val gson = Gson()
-        client.process(image)
-                .addOnSuccessListener(executor, {
-                    val result = Result(it)
-                    val json: String = if (result.landMarks.isEmpty()) {
-                        ""
-                    } else {
-                        gson.toJson(result)
-                    }
-                    client.close()
-                    singleMode = false
-                    task.setResult(json)
-                })
-                .addOnFailureListener(executor, {
-                    singleMode = false
-                    task.setException(it)
-                })
-        return task.task
+
+        return FutureTask {
+            try {
+                val results = Tasks.await(client.process(image))
+                val result = Result(results)
+                if (result.landMarks.isEmpty()) {
+                    ""
+                } else {
+                    gson.toJson(result)
+                }
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
+                onlySingleMode = false
+                client.close()
+            }
+        }
     }
 
-    fun processBytes(bytes: ByteArray, width: Int, height: Int, rotation: Int, format: Int): Task<String> {
+    override fun process(
+        bytes: ByteArray,
+        width: Int,
+        height: Int,
+        rotation: Int,
+        format: Int
+    ): FutureTask<String> {
+        onlySingleMode = true
         val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        return processImage(input)
+        return process(input)
     }
 
-    fun processBitmap(bitmap: Bitmap, rotation: Int): Task<String> {
-        singleMode = true
+    override fun process(bitmap: Bitmap, rotation: Int): FutureTask<String> {
+        onlySingleMode = true
         val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input)
+        return process(input)
     }
 
 }

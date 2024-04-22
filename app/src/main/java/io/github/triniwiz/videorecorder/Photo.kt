@@ -22,8 +22,10 @@ class Photo : AppCompatActivity() {
         imageView = findViewById(R.id.imageView)
         cameraView = findViewById(R.id.PhotoView)
         //FancyCamera.forceV1 = true
+        cameraView.defaultLens = CameraLens.telephoto
         cameraView.autoFocus = true
-      //  cameraView.quality = Quality.HIGHEST
+        cameraView.saveToGallery = true
+        cameraView.quality = Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onReadyUI() {
                 
@@ -58,7 +60,7 @@ class Photo : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.None
+
         cameraView.setOnFacesDetectedListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnFacesDetectedListener: Success ${result}")
@@ -80,7 +82,8 @@ class Photo : AppCompatActivity() {
             }
         })
        // cameraView.saveToGallery = true
-        cameraView.autoSquareCrop = true
+       // cameraView.autoSquareCrop = true
+        cameraView.defaultLens = CameraLens.auto
     }
 
     fun takePhoto(view: View) {

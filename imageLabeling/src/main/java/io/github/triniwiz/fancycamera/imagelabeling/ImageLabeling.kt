@@ -1,60 +1,48 @@
 package io.github.triniwiz.fancycamera.imagelabeling
 
-import android.graphics.Bitmap
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import io.github.triniwiz.fancycamera.ImageProcessor
 import org.json.JSONObject
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
-class ImageLabeling {
-    private var executor: ExecutorService = Executors.newSingleThreadExecutor()
-    fun processImage(image: InputImage, options: Options): Task<String> {
-        val task = TaskCompletionSource<String>()
+class ImageLabeling : ImageProcessor<String> {
+    var options = Options()
+    override val type: Int
+        get() = 2
+
+    private val gson = Gson()
+    override fun process(image: InputImage): FutureTask<String> {
         val client = com.google.mlkit.vision.label.ImageLabeling.getClient(
             ImageLabelerOptions.Builder().setConfidenceThreshold(options.confidenceThreshold)
                 .build()
         )
-        val gson = Gson()
-        client.process(image)
-            .addOnSuccessListener(executor, {
+
+        return FutureTask {
+            try {
+                val results = Tasks.await(client.process(image))
                 val result = mutableListOf<Result>()
-                for (label in it) {
+                for (label in results) {
                     result.add(Result(label))
                 }
-                val json = if (result.isNotEmpty()) {
+                if (result.isNotEmpty()) {
                     gson.toJson(result)
                 } else {
                     ""
                 }
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
                 client.close()
-                task.setResult(json)
-            })
-            .addOnFailureListener(executor, {
-                task.setException(it)
-            })
-        return task.task
+            }
+        }
     }
 
-    fun processBytes(
-        bytes: ByteArray,
-        width: Int,
-        height: Int,
-        rotation: Int,
-        format: Int,
-        options: Options
-    ): Task<String> {
-        val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        return processImage(input, options)
-    }
-
-    fun processBitmap(bitmap: Bitmap, rotation: Int, options: Options): Task<String> {
-        val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input, options)
-    }
 
     class Options {
         var confidenceThreshold = 0.5f

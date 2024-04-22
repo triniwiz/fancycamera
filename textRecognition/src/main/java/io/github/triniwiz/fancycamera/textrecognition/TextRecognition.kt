@@ -1,43 +1,36 @@
 package io.github.triniwiz.fancycamera.textrecognition
 
-import android.graphics.Bitmap
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
+import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import io.github.triniwiz.fancycamera.ImageProcessor
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.FutureTask
 
-import java.util.concurrent.Executors
-
-class TextRecognition {
-    private val executor = Executors.newSingleThreadExecutor()
-    fun processImage(image: InputImage): Task<String> {
-        val task = TaskCompletionSource<String>()
-        val client = com.google.mlkit.vision.text.TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val gson = Gson()
-        client.process(image)
-                .addOnSuccessListener(executor, {
-                    val result = Result(it)
-                    val json: String = if (result.text.isEmpty() && result.blocks.isEmpty()) {
-                        ""
-                    } else {
-                        gson.toJson(result)
-                    }
-                    task.setResult(json)
-                })
-                .addOnFailureListener(executor, {
-                    task.setException(it)
-                })
-        return task.task
-    }
-
-    fun processBytes(bytes: ByteArray, width: Int, height: Int, rotation: Int, format: Int): Task<String> {
-        val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        return processImage(input)
-    }
-
-    fun processBitmap(bitmap: Bitmap, rotation: Int): Task<String> {
-        val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input)
+class TextRecognition : ImageProcessor<String> {
+    override val type: Int
+        get() = 6
+    private val gson = Gson()
+    override fun process(image: InputImage): FutureTask<String> {
+        val client =
+            com.google.mlkit.vision.text.TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        return FutureTask {
+            try {
+                val results = Tasks.await(client.process(image))
+                val result = Result(results)
+                if (result.text.isEmpty() && result.blocks.isEmpty()) {
+                    ""
+                } else {
+                    gson.toJson(result)
+                }
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
+                client.close()
+            }
+        }
     }
 }

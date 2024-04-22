@@ -1,19 +1,23 @@
 package io.github.triniwiz.fancycamera.facedetection
 
 import android.graphics.Bitmap
-import com.google.android.gms.tasks.*
+import com.google.android.gms.tasks.Tasks
 import com.google.gson.Gson
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import io.github.triniwiz.fancycamera.ImageProcessor
 import org.json.JSONObject
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Future
+import java.util.concurrent.FutureTask
 
-class FaceDetection() {
-    private var executor: ExecutorService = Executors.newSingleThreadExecutor()
+class FaceDetection : ImageProcessor<String> {
+    var options = Options()
 
-    fun processImage(image: InputImage, options: Options): Task<String> {
-        val task = TaskCompletionSource<String>()
+    override val type: Int
+        get() = 1
+    private val gson = Gson()
+    override fun process(image: InputImage): FutureTask<String> {
         val opts = FaceDetectorOptions.Builder()
         if (options.faceTracking) {
             opts.enableTracking()
@@ -24,43 +28,28 @@ class FaceDetection() {
         opts.setContourMode(options.contourMode.toNative())
         opts.setClassificationMode(options.classificationMode.toNative())
         val client = com.google.mlkit.vision.face.FaceDetection.getClient(opts.build())
-        val gson = Gson()
-        client.process(image)
-            .addOnSuccessListener(executor, {
+
+        return FutureTask {
+            try {
+                val results = Tasks.await(client.process(image))
                 val result = mutableListOf<Result>()
-                for (face in it) {
+                for (face in results) {
                     result.add(Result(face))
                 }
 
-                val json = if (result.isNotEmpty()) {
+                if (result.isNotEmpty()) {
                     gson.toJson(result)
                 } else {
                     ""
                 }
+            } catch (e: ExecutionException) {
+                throw e
+            } catch (e: InterruptedException) {
+                throw e
+            } finally {
                 client.close()
-                task.setResult(json)
-            })
-            .addOnFailureListener(executor, {
-                task.setException(it)
-            })
-        return task.task
-    }
-
-    fun processBytes(
-        bytes: ByteArray,
-        width: Int,
-        height: Int,
-        rotation: Int,
-        format: Int,
-        options: Options
-    ): Task<String> {
-        val input = InputImage.fromByteArray(bytes, width, height, rotation, format)
-        return processImage(input, options)
-    }
-
-    fun processBitmap(bitmap: Bitmap, rotation: Int, options: Options): Task<String> {
-        val input = InputImage.fromBitmap(bitmap, rotation)
-        return processImage(input, options)
+            }
+        }
     }
 
     enum class DetectionMode(private val mode: String) {
