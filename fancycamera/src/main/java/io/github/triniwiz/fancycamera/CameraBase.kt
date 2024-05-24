@@ -390,6 +390,8 @@ abstract class CameraBase @JvmOverloads constructor(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    abstract fun isWideAngleSupported(): Boolean
+
     companion object {
         internal val EMA_FILTER = 0.6
     }

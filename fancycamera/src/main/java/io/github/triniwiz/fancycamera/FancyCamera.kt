@@ -76,6 +76,10 @@ class FancyCamera : FrameLayout {
         }
     }
 
+    fun isWideAngleSupported(): Boolean {
+        return cameraView.isWideAngleSupported()
+    }
+
     var defaultLens: CameraLens
         get() {
             return cameraView.defaultLens
@@ -119,7 +123,6 @@ class FancyCamera : FrameLayout {
         get() {
             return cameraView.latestImage
         }
-
 
     var pause: Boolean
         get() {

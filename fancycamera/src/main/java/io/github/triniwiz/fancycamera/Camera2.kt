@@ -17,6 +17,7 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.Surface
+import androidx.annotation.NonNull
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
@@ -40,6 +41,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.lang.ref.WeakReference
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,13 +50,16 @@ import java.util.concurrent.TimeUnit
 import kotlin.collections.HashMap
 
 
-@SuppressLint("UnsafeOptInUsageError")
+@SuppressLint("UnsafeOptInUsageError", "RestrictedApi")
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 class Camera2 @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : CameraBase(context, attrs, defStyleAttr) {
+
     private var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
+
     private var cameraProvider: ProcessCameraProvider? = null
+
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: androidx.camera.core.ImageAnalysis? = null
     private var videoCapture: VideoCapture<Recorder>? = null
@@ -148,7 +153,7 @@ class Camera2 @JvmOverloads constructor(
         // handles the case where: user changes the zoom before camera is ready, apply it when camera ready
         // user changes zoom after camera is ready, this will trigger on the zoom setter
         camera?.cameraControl?.let {
-            var zoomChanged = true;
+            var zoomChanged = true
             if (storedZoom > 0) {
                 it.setLinearZoom(storedZoom)
                 storedZoom = -1f
@@ -163,7 +168,6 @@ class Camera2 @JvmOverloads constructor(
             }
         }
     }
-
 
     override val previewSurface: Any
         get() {
@@ -265,6 +269,23 @@ class Camera2 @JvmOverloads constructor(
     }
 
     private var scaleFactor = 1F
+    var deviceCameraInfo = mutableListOf<CameraInfo>()
+        private set
+
+    val currentCameraInfo: CameraInfo?
+        get() {
+            if (camera != null) {
+                val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                return CameraInfo(
+                    info.cameraId,
+                    camera!!.cameraInfo.implementationType,
+                    CameraxCameraCharacteristicsImpl(info)
+                )
+            }
+            return null
+        }
+
+    private var wideCameraInfo: androidx.camera.core.CameraInfo? = null
     private fun setupGestureListeners() {
 
         val listener =
@@ -339,6 +360,10 @@ class Camera2 @JvmOverloads constructor(
     }
 
 
+    fun setCameraWithId(id: String) {
+
+    }
+
     init {
         setupGestureListeners()
         previewView.afterMeasured {
@@ -348,9 +373,30 @@ class Camera2 @JvmOverloads constructor(
 
         // TODO: Bind this to the view's onCreate method
         cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+
         cameraProviderFuture.addListener({
             try {
                 cameraProvider?.unbindAll()
+                cameraProviderFuture.get()?.let {
+                    cameraProvider = it
+                    deviceCameraInfo.clear()
+                    it.availableCameraInfos.forEach { ci ->
+                        val info = Camera2CameraInfo.from((ci))
+                        deviceCameraInfo.add(
+                            CameraInfo(
+                                info.cameraId,
+                                ci.implementationType,
+                                CameraxCameraCharacteristicsImpl(info)
+                            )
+                        )
+                    }
+                    it.availableCameraInfos.minByOrNull { info ->
+                        info.intrinsicZoomRatio
+                    }?.let { info ->
+                        mIsWideAngleSupported = info.intrinsicZoomRatio < 1.0
+                        wideCameraInfo = info
+                    }
+                }
                 cameraProvider = cameraProviderFuture.get()
                 refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
@@ -360,12 +406,18 @@ class Camera2 @JvmOverloads constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    private var mIsWideAngleSupported = false
+
+    override fun isWideAngleSupported(): Boolean {
+        return mIsWideAngleSupported
+    }
+
     private fun handleAutoFocus() {
         if (camera?.cameraControl == null) {
             pendingAutoFocus = true
             return
         }
-        pendingAutoFocus = false;
+        pendingAutoFocus = false
         if (autoFocus) {
             val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
                 previewView.width.toFloat(), previewView.height.toFloat()
@@ -428,44 +480,104 @@ class Camera2 @JvmOverloads constructor(
 
     override var position: CameraPosition = CameraPosition.BACK
 
+
+    var frontCameraId: String? = null
+        set(value) {
+            field = value
+            if (!isRecording && position == CameraPosition.FRONT) {
+                if (camera?.cameraInfo != null) {
+                    val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                    if (value == info.cameraId) {
+                        return
+                    }
+                }
+                refreshCamera()
+            }
+        }
+
+    var backCameraId: String? = null
+        set(value) {
+            field = value
+            if (!isRecording && position == CameraPosition.BACK) {
+                if (camera?.cameraInfo != null) {
+                    val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                    if (value == info.cameraId) {
+                        return
+                    }
+                }
+                refreshCamera()
+            }
+        }
+
+    // todo
+    var externalCameraId: String? = null
+
     private fun selectorFromPosition(): CameraSelector {
         return CameraSelector.Builder()
             .apply {
-                addCameraFilter {
-                    it.filter { info ->
-                        if (info.lensFacing == CameraSelector.LENS_FACING_EXTERNAL || info.lensFacing == CameraSelector.LENS_FACING_UNKNOWN) {
-                            false
-                        } else if (position.lenFacing != info.lensFacing) {
-                            false
+                if (position == CameraPosition.FRONT && frontCameraId != null) {
+                    addCameraFilter { infos ->
+                        infos.filter {
+                            val info = Camera2CameraInfo.from(it)
+                            info.cameraId == frontCameraId!!
+                        }.toMutableList()
+                    }
+                } else if (position == CameraPosition.BACK && backCameraId != null) {
+                    addCameraFilter { infos ->
+                        infos.filter {
+                            val info = Camera2CameraInfo.from(it)
+                            info.cameraId == backCameraId!!
+                        }.toMutableList()
+                    }
+                } else {
+                    if (isWideAngleSupported()) {
+                        if (defaultLens == CameraLens.auto) {
+                            if (position == CameraPosition.FRONT) {
+                                requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                            } else {
+                                requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                            }
                         } else {
-                            when (defaultLens) {
-                                CameraLens.auto -> {
-                                    if (info.intrinsicZoomRatio >= 1.0) {
-                                        true
-                                    } else {
+                            addCameraFilter {
+                                it.filter { info ->
+                                    if (info.lensFacing == CameraSelector.LENS_FACING_EXTERNAL || info.lensFacing == CameraSelector.LENS_FACING_UNKNOWN) {
                                         false
-                                    }
-                                }
+                                    } else if (position.lenFacing != info.lensFacing) {
+                                        false
+                                    } else {
+                                        when (defaultLens) {
+                                            CameraLens.telephoto -> {
+                                                if (info.intrinsicZoomRatio >= 1.0) {
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            }
 
-                                CameraLens.telephoto -> {
-                                    if (info.intrinsicZoomRatio >= 1.0) {
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
+                                            CameraLens.wide, CameraLens.ultrawide -> {
+                                                if (info.intrinsicZoomRatio < 1.0) {
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            }
 
-                                CameraLens.wide, CameraLens.ultrawide -> {
-                                    if (info.intrinsicZoomRatio < 1.0) {
-                                        true
-                                    } else {
-                                        false
+                                            CameraLens.auto -> true
+                                        }
                                     }
                                 }
                             }
                         }
+
+                    } else {
+                        if (position == CameraPosition.FRONT) {
+                            requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                        } else {
+                            requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        }
                     }
                 }
+
             }
             .build()
     }
@@ -474,7 +586,7 @@ class Camera2 @JvmOverloads constructor(
      * TODO: link this to the code, overriding or affecting targetRotation logic */
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
-    @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeExperimentalUsageError")
     override fun orientationUpdated() {
         val rotation = when (currentOrientation) {
             270 -> Surface.ROTATION_270
@@ -618,7 +730,6 @@ class Camera2 @JvmOverloads constructor(
                                     when (processor.type) {
                                         0 -> {
                                             onBarcodeScanningListener?.onSuccess(result)
-                                            return@execute
                                         }
 
                                         1 -> {
@@ -776,6 +887,7 @@ class Camera2 @JvmOverloads constructor(
 
         val extender = Camera2Interop.Extender(builder)
 
+
         when (whiteBalance) {
             WhiteBalance.Auto -> {
                 extender.setCaptureRequestOption(
@@ -850,9 +962,30 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
+    interface CameraCharacteristicsImpl {
+        fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T?
+    }
 
-    class CameraInfo(val id: String, characteristics: Camera2CameraInfo) {
+    class CameraxCameraCharacteristicsImpl(private val characteristics: Camera2CameraInfo) :
+        CameraCharacteristicsImpl {
+        override fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T? {
+            return characteristics.getCameraCharacteristic(key)
+        }
+    }
 
+
+    class Camera2CameraCharacteristicsImpl(private val characteristics: CameraCharacteristics) :
+        CameraCharacteristicsImpl {
+        override fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T? {
+            return characteristics.get(key)
+        }
+    }
+
+    class CameraInfo(
+        val id: String,
+        val implementationType: String,
+        characteristics: CameraCharacteristicsImpl
+    ) {
 
         val lensFacing by lazy {
             when (characteristics.getCameraCharacteristic(CameraCharacteristics.LENS_FACING)!!) {
@@ -861,6 +994,16 @@ class Camera2 @JvmOverloads constructor(
                 CameraCharacteristics.LENS_FACING_EXTERNAL -> 2
                 else -> 2
             }
+        }
+
+
+        val capabilities by lazy {
+            characteristics.getCameraCharacteristic(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+        }
+
+
+        val focalLengths by lazy {
+            characteristics.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
         }
 
         val maxDigitalZoom by lazy {
@@ -904,8 +1047,10 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-  //  private var cameraInfoCache: MutableMap<String, CameraInfo> = mutableMapOf()
+    //  private var cameraInfoCache: MutableMap<String, CameraInfo> = mutableMapOf()
     private fun initPreview() {
+
+        safeUnbindAll()
 
         val previewBuilder = Preview.Builder()
             .apply {
@@ -924,23 +1069,18 @@ class Camera2 @JvmOverloads constructor(
 
             }
 
-        preview = previewBuilder
-            .build()
-            .also {
-                it.setSurfaceProvider(this.previewView.surfaceProvider)
-            }
-
         if (imageAnalysis == null) {
             setUpAnalysis()
         }
 
-        bindDefaultUseCase()
-
-        if (defaultLens == CameraLens.auto){
-            camera?.cameraInfo?.let {
-                val info = Camera2CameraInfo.from(it)
-                val cameraInfo = CameraInfo(info.cameraId, info)
-
+        if (defaultLens == CameraLens.auto) {
+            if (wideCameraInfo != null) {
+                val info = Camera2CameraInfo.from(wideCameraInfo!!)
+                val cameraInfo = CameraInfo(
+                    info.cameraId,
+                    wideCameraInfo!!.implementationType,
+                    CameraxCameraCharacteristicsImpl(info)
+                )
 
                 val builder = Preview.Builder()
                     .apply {
@@ -963,13 +1103,10 @@ class Camera2 @JvmOverloads constructor(
 
                 val zoomRange = cameraInfo.zoomRange
                 val zoomClamped = zoomRange.clamp(zoom)
-
-
                 if (cameraInfo.hardwareLevel >= 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                     extender.setCaptureRequestOption(CaptureRequest.CONTROL_ZOOM_RATIO, zoomClamped)
                 } else {
                     val size = cameraInfo.activeSize
-
                     val dx = (size.width() / zoomClamped / 2).toInt()
                     val dy = (size.height() / zoomClamped / 2).toInt()
                     val left = size.centerX() - this.left - dx
@@ -984,14 +1121,29 @@ class Camera2 @JvmOverloads constructor(
 
                 preview = previewBuilder
                     .build()
+                    .also { value ->
+                        value.setSurfaceProvider(this.previewView.surfaceProvider)
+                    }
+
+                bindDefaultUseCase()
+            } else {
+                preview = previewBuilder
+                    .build()
                     .also {
                         it.setSurfaceProvider(this.previewView.surfaceProvider)
                     }
 
-                safeUnbindAll()
                 bindDefaultUseCase()
-
             }
+
+        } else {
+            preview = previewBuilder
+                .build()
+                .also {
+                    it.setSurfaceProvider(this.previewView.surfaceProvider)
+                }
+
+            bindDefaultUseCase()
         }
 
         if (pendingAutoFocus) {
@@ -1014,7 +1166,7 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    @SuppressLint("RestrictedApi")
+
     private fun initVideoCapture() {
         if (pause) {
             return
@@ -1041,7 +1193,7 @@ class Camera2 @JvmOverloads constructor(
 
     private var zoomRange = 1F..1F
 
-    @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
+    @SuppressLint("UnsafeOptInUsageError")
     private fun refreshCamera() {
         if (pause) {
             return
@@ -1066,7 +1218,6 @@ class Camera2 @JvmOverloads constructor(
         initVideoCapture()
 
         handleZoom()
-
 
         camera?.cameraInfo?.let {
             val streamMap = Camera2CameraInfo.from(it)
@@ -1153,7 +1304,6 @@ class Camera2 @JvmOverloads constructor(
         return
     }
 
-    @SuppressLint("RestrictedApi")
     override fun startRecording() {
         if (!hasAudioPermission() || !hasCameraPermission()) {
             return
@@ -1324,7 +1474,6 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    @SuppressLint("RestrictedApi")
     override fun stopRecording() {
         if (flashMode == CameraFlashMode.ON) {
             camera?.cameraControl?.enableTorch(false)

@@ -1,6 +1,7 @@
 package io.github.triniwiz.fancycamera.barcodescanning
 
 import android.graphics.Rect
+import com.google.gson.annotations.SerializedName
 import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.*
 
@@ -38,9 +39,16 @@ class Result(barcode: Barcode) {
         }
 
         enum class EncryptionType(val type: String) {
+            @SerializedName("open")
             Open("open"),
+
+            @SerializedName("wpa")
             WPA("wpa"),
+
+            @SerializedName("wep")
             WEP("wep"),
+
+            @SerializedName("unknown")
             Unknown("unknown")
         }
     }
@@ -71,10 +79,19 @@ class Result(barcode: Barcode) {
         }
 
         enum class Type(val typeName: String) {
+            @SerializedName("unknown")
             Unknown("unknown"),
+
+            @SerializedName("home")
             Home("home"),
+
+            @SerializedName("work")
             Work("work"),
+
+            @SerializedName("fax")
             Fax("fax"),
+
+            @SerializedName("mobile")
             Mobile("mobile")
         }
     }
@@ -95,8 +112,13 @@ class Result(barcode: Barcode) {
         }
 
         enum class Type(val typeName: String) {
+            @SerializedName("unknown")
             Unknown("unknown"),
+
+            @SerializedName("home")
             Home("home"),
+
+            @SerializedName("work")
             Work("work")
         }
     }
@@ -181,8 +203,13 @@ class Result(barcode: Barcode) {
             }
 
             enum class Type(val typeName: String) {
+                @SerializedName("unknown")
                 Unknown("unknown"),
+
+                @SerializedName("home")
                 Home("home"),
+
+                @SerializedName("work")
                 Work("work")
             }
         }
@@ -212,18 +239,43 @@ class Result(barcode: Barcode) {
     }
 
     enum class ValueType(val type: String) {
+        @SerializedName("contactInfo")
         ContactInfo("contactInfo"),
+
+        @SerializedName("email")
         Email("email"),
+
+        @SerializedName("isbn")
         ISBN("isbn"),
+
+        @SerializedName("phone")
         Phone("phone"),
+
+        @SerializedName("product")
         Product("product"),
+
+        @SerializedName("text")
         Text("text"),
+
+        @SerializedName("sms")
         Sms("sms"),
+
+        @SerializedName("url")
         URL("url"),
+
+        @SerializedName("wifi")
         WiFi("wifi"),
+
+        @SerializedName("geo")
         Geo("geo"),
+
+        @SerializedName("calender")
         CalenderEvent("calender"),
+
+        @SerializedName("driverLicense")
         DriverLicense("driverLicense"),
+
+        @SerializedName("unknown")
         Unknown("unknown")
     }
 

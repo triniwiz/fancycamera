@@ -45,10 +45,12 @@ class MainActivity : AppCompatActivity() {
         durationView = findViewById(R.id.durationView)
         container = findViewById(R.id.container)
         cameraView = FancyCamera(this)
-        cameraView.ratio = "16:9"
+//        cameraView.ratio = "16:9"
+//        cameraView.ratio = "16:9"
         cameraView.autoFocus = true
         cameraView.position = CameraPosition.BACK
         cameraView.processEveryNthFrame = 9
+        cameraView.defaultLens = CameraLens.auto
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onReadyUI() {
             }
@@ -104,12 +106,12 @@ class MainActivity : AppCompatActivity() {
 
         })
 
-        cameraView.addImageProcessor(
-            BarcodeScanner()
-        )
-        cameraView.addImageProcessor(
-            TextRecognition()
-        )
+//        cameraView.addImageProcessor(
+//            BarcodeScanner()
+//        )
+//        cameraView.addImageProcessor(
+//            TextRecognition()
+//        )
 
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
@@ -229,8 +231,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startRecording(view: View) {
-        cameraView.quality = Quality.HIGHEST
-        cameraView.startRecording()
+//        cameraView.quality = Quality.HIGHEST
+//        cameraView.startRecording()
+
+        cameraView.takePhoto()
 
     }
 
@@ -272,6 +276,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         cameraView.stopPreview()
         cameraView.stop()
+        cameraView.release()
         super.onPause()
         if (levelsTask != null) {
             levelsTask!!.cancel()

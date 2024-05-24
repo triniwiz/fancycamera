@@ -1,5 +1,6 @@
 package io.github.triniwiz.fancycamera.posedetection
 
+import com.google.gson.annotations.SerializedName
 import com.google.mlkit.vision.pose.Pose
 import com.google.mlkit.vision.pose.PoseLandmark
 
@@ -64,39 +65,106 @@ class Result(pose: Pose) {
         }
 
         enum class Type(val type: String) {
+            @SerializedName("node")
             Nose("nose"),
+
+            @SerializedName("leftEyeInner")
             LeftEyeInner("leftEyeInner"),
+
+            @SerializedName("leftEye")
             LeftEye("leftEye"),
+
+            @SerializedName("leftEyeOuter")
             LeftEyeOuter("leftEyeOuter"),
+
+            @SerializedName("rightEyeInner")
             RightEyeInner("rightEyeInner"),
-            RightEye("leftEye"),
-            RightEyeOuter("leftEyeOuter"),
+
+            @SerializedName("rightEye")
+            RightEye("rightEye"),
+
+            @SerializedName("rightEyeOuter")
+            RightEyeOuter("rightEyeOuter"),
+
+            @SerializedName("leftEar")
             LeftEar("leftEar"),
+
+            @SerializedName("rightEar")
             RightEar("rightEar"),
+
+            @SerializedName("leftMouth")
             LeftMouth("leftMouth"),
+
+            @SerializedName("rightMouth")
             RightMouth("rightMouth"),
+
+            @SerializedName("leftShoulder")
             LeftShoulder("leftShoulder"),
+
+            @SerializedName("rightShoulder")
             RightShoulder("rightShoulder"),
+
+            @SerializedName("leftElbow")
             LeftElbow("leftElbow"),
+
+            @SerializedName("rightElbow")
             RightElbow("rightElbow"),
+
+            @SerializedName("leftWrist")
             LeftWrist("leftWrist"),
+
+            @SerializedName("rightWrist")
             RightWrist("rightWrist"),
+
+            @SerializedName("leftPinky")
             LeftPinky("leftPinky"),
+
+            @SerializedName("rightPinky")
             RightPinky("rightPinky"),
+
+            @SerializedName("leftIndex")
             LeftIndex("leftIndex"),
+
+            @SerializedName("rightIndex")
             RightIndex("rightIndex"),
+
+            @SerializedName("leftThumb")
             LeftThumb("leftThumb"),
+
+            @SerializedName("rightThumb")
             RightThumb("rightThumb"),
+
+            @SerializedName("leftHip")
             LeftHip("leftHip"),
+
+            @SerializedName("rightHip")
             RightHip("rightHip"),
+
+            @SerializedName("leftKnee")
             LeftKnee("leftKnee"),
+
+            @SerializedName("rightKnee")
             RightKnee("rightKnee"),
+
+            @SerializedName("leftAnkle")
             LeftAnkle("leftAnkle"),
+
+            @SerializedName("rightAnkle")
             RightAnkle("rightAnkle"),
+
+            @SerializedName("leftHeel")
             LeftHeel("leftHeel"),
+
+            @SerializedName("rightHeel")
             RightHeel("rightHeel"),
+
+            @SerializedName("leftFootIndex")
             LeftFootIndex("leftFootIndex"),
+
+            @SerializedName("rightFootIndex")
             RightFootIndex("rightFootIndex"),
+
+            @SerializedName("unknown")
             Unknown("unknown")
         }
     }

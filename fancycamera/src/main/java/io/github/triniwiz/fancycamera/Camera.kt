@@ -375,6 +375,7 @@ class Camera @JvmOverloads constructor(
         var cameraPosition = Camera.CameraInfo.CAMERA_FACING_BACK
         for (i in 0 until camerasCount) {
             Camera.getCameraInfo(i, cameraInfo)
+
             if (position == CameraPosition.FRONT && cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
                 cameraPosition = i
                 break
@@ -1227,6 +1228,10 @@ class Camera @JvmOverloads constructor(
         get() = 20 * log10(amplitude / 32767.0)
 
     private var mEMA = 0.0
+    override fun isWideAngleSupported(): Boolean {
+        return false
+    }
+
     override val amplitudeEMA: Double
         get() {
             val amp = amplitude

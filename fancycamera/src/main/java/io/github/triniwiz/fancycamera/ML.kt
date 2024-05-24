@@ -55,6 +55,7 @@ class ML {
                     for (processor in imageProcessors) {
                         val process = processor.process(image)
                         try {
+                            process.run()
                             val result = process.get()
                             when (processor.type) {
                                 0 -> {
@@ -144,7 +145,11 @@ class ML {
                             }
                         }
                     }
-                }
+
+                    if (!hasError){
+                        callback.onSuccess(ret)
+                    }
+                } ?: callback.onError("Invalid input", Exception("Invalid input"))
             }
         }
     }
