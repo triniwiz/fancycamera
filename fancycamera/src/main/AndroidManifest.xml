@@ -18,7 +18,7 @@
         android:name="android.hardware.camera"
         android:required="false" />
 
-    <uses-sdk tools:overrideLibrary="androidx.camera.view,androidx.camera.extensions,androidx.camera.camera2,androidx.camera.lifecycle,androidx.camera.core"/>
+    <uses-sdk tools:overrideLibrary="androidx.camera.view,androidx.camera.extensions,androidx.camera.camera2,androidx.camera.lifecycle,androidx.camera.core,androidx.camera.video"/>
     <application>
         <provider
             android:name=".FancyCameraFileProvider"

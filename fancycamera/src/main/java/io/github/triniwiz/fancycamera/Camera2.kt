@@ -161,7 +161,7 @@ class Camera2 @JvmOverloads constructor(
                 it.setZoomRatio(storedZoomRatio)
                 storedZoomRatio = -1f
             } else {
-                zoomChanged = false;
+                zoomChanged = false
             }
             if (zoomChanged) {
                 onZoomChange()
@@ -393,8 +393,12 @@ class Camera2 @JvmOverloads constructor(
                     it.availableCameraInfos.minByOrNull { info ->
                         info.intrinsicZoomRatio
                     }?.let { info ->
-                        mIsWideAngleSupported = info.intrinsicZoomRatio < 1.0
-                        wideCameraInfo = info
+                        if (!mIsWideAngleSupported) {
+                            mIsWideAngleSupported = info.intrinsicZoomRatio < 1.0
+                            if (mIsWideAngleSupported) {
+                                wideCameraInfo = info
+                            }
+                        }
                     }
                 }
                 cameraProvider = cameraProviderFuture.get()
