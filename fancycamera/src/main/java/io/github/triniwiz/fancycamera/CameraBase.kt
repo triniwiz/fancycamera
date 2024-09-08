@@ -328,7 +328,7 @@ abstract class CameraBase @JvmOverloads constructor(
     }
 
     fun hasStoragePermission(): Boolean {
-        return if (Build.VERSION.SDK_INT < 23) {
+        return if (Build.VERSION.SDK_INT < 23 || Build.VERSION.SDK_INT >= 30) {
             true
         } else ContextCompat.checkSelfPermission(
             context,

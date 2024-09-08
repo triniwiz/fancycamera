@@ -6,7 +6,7 @@ android {
     buildToolsVersion BUILD_TOOLS_VERSION as String
     defaultConfig {
         applicationId "co.fitcom.videorecorder"
-        minSdkVersion 19
+        minSdkVersion 21
         targetSdkVersion COMPILE_SDK_VERSION as int
         versionCode 1
         versionName "1.0"

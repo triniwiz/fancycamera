@@ -17,12 +17,12 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.Surface
-import androidx.annotation.NonNull
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
 import androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+import androidx.camera.core.impl.utils.Exif
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -30,6 +30,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.net.ParseException
 import androidx.core.view.GestureDetectorCompat
 import androidx.databinding.ObservableArrayList
 import androidx.databinding.ObservableList
@@ -37,17 +38,17 @@ import androidx.databinding.ObservableList.OnListChangedCallback
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.LifecycleOwner
 import com.google.common.util.concurrent.ListenableFuture
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.lang.ref.WeakReference
-import java.text.ParseException
+import java.io.InputStream
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.collections.HashMap
 
 
 @SuppressLint("UnsafeOptInUsageError", "RestrictedApi")
@@ -301,7 +302,7 @@ class Camera2 @JvmOverloads constructor(
                     return true
                 }
 
-                override fun onDown(p0: MotionEvent): Boolean = false
+                override fun onDown(p0: MotionEvent): Boolean = true
 
                 override fun onShowPress(p0: MotionEvent) = Unit
 
@@ -352,10 +353,15 @@ class Camera2 @JvmOverloads constructor(
         val scaleGestureDetector = ScaleGestureDetector(context, listener)
         val gestureDetectorCompat = GestureDetectorCompat(context, listener)
         previewView.setOnTouchListener { view, event ->
-            if (enablePinchZoom) scaleGestureDetector.onTouchEvent(event)
-            if (enableTapToFocus) gestureDetectorCompat.onTouchEvent(event)
+            var consumed = false
+            if (enablePinchZoom) {
+                consumed = scaleGestureDetector.onTouchEvent(event)
+            }
+            if (!scaleGestureDetector.isInProgress && enableTapToFocus) {
+                consumed = gestureDetectorCompat.onTouchEvent(event)
+            }
             view.performClick()
-            true
+            consumed
         }
     }
 
@@ -1578,91 +1584,154 @@ class Camera2 @JvmOverloads constructor(
         var isError = false
         var outputStream: FileOutputStream? = null
         try {
-            val meta = ImageCapture.Metadata().apply {
-                isReversedHorizontal = position == CameraPosition.FRONT
-            }
 
-            val buffer = image.planes.first().buffer
-            val bytes = ByteArray(buffer.remaining())
-            buffer.get(bytes)
+            val buffer: ByteBuffer = image.planes[0].buffer
+            buffer.rewind()
+            val data = ByteArray(buffer.capacity())
+            buffer.get(data)
+            buffer.rewind()
+            val inputStream: InputStream = ByteArrayInputStream(data)
+            val srcExif = ExifInterface(inputStream)
 
-            val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            val matrix = Matrix()
-
-            // Registering image's required rotation, provided by Androidx ImageAnalysis
-            val imageTargetRotation = image.imageInfo.rotationDegrees
-            matrix.postRotate(imageTargetRotation.toFloat())
-
-            // Flipping over the image in case it is the front camera
-            if (position == CameraPosition.FRONT)
-                matrix.postScale(-1f, 1f)
-
+            var bm = image.toBitmap()
             var originalWidth = bm.width
             var originalHeight = bm.height
             var offsetWidth = 0
             var offsetHeight = 0
+            var matrix: Matrix? = null
+
+            if (!allowExifRotation) {
+                matrix = Matrix()
+                // Registering image's required rotation, provided by Androidx ImageAnalysis
+                val imageTargetRotation = image.imageInfo.rotationDegrees
+                matrix.postRotate(imageTargetRotation.toFloat())
+
+                // Flipping over the image in case it is the front camera
+                if (position == CameraPosition.FRONT)
+                    matrix.postScale(-1f, 1f)
+            }
+
             if (autoSquareCrop) {
                 if (originalWidth < originalHeight) {
-                    offsetHeight = (originalHeight - originalWidth) / 2;
-                    originalHeight = originalWidth;
+                    offsetHeight = (originalHeight - originalWidth) / 2
+                    originalHeight = originalWidth
                 } else {
-                    offsetWidth = (originalWidth - originalHeight) / 2;
-                    originalWidth = originalHeight;
+                    offsetWidth = (originalWidth - originalHeight) / 2
+                    originalWidth = originalHeight
                 }
             }
-            val rotated = Bitmap.createBitmap(
-                bm,
-                offsetWidth,
-                offsetHeight,
-                originalWidth,
-                originalHeight,
-                matrix,
-                false
-            )
+
+            if (autoSquareCrop || !allowExifRotation) {
+                bm = Bitmap.createBitmap(
+                    bm,
+                    offsetWidth,
+                    offsetHeight,
+                    originalWidth,
+                    originalHeight,
+                    matrix,
+                    false
+                )
+            }
+
             outputStream = FileOutputStream(file!!, false)
             var override: Bitmap? = null
             if (overridePhotoHeight > 0 && overridePhotoWidth > 0) {
                 override = Bitmap.createScaledBitmap(
-                    rotated,
+                    bm,
                     overridePhotoWidth,
                     overridePhotoHeight,
                     false
                 )
-                override.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+                override.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             } else {
-                rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+                bm.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             }
 
-
-            val exif = ExifInterface(file!!.absolutePath)
+            val dstExif = ExifInterface(file!!.absolutePath)
 
             val now = System.currentTimeMillis()
             val datetime = convertToExifDateTime(now)
 
-            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
-            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
+            dstExif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
+            dstExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
 
             try {
                 val subsec = (now - convertFromExifDateTime(datetime).time).toString()
-                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
-                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
+                dstExif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
+                dstExif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
             } catch (_: ParseException) {
             }
 
-            exif.rotate(image.imageInfo.rotationDegrees)
-            if (meta.isReversedHorizontal) {
-                exif.flipHorizontally()
+            if (allowExifRotation) {
+                val exifOrientation = srcExif.getAttribute(ExifInterface.TAG_ORIENTATION)
+
+                dstExif.setAttribute(ExifInterface.TAG_ORIENTATION, exifOrientation)
             }
-            if (meta.isReversedVertical) {
-                exif.flipVertically()
+
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_APERTURE_VALUE,
+                srcExif.getAttribute(ExifInterface.TAG_APERTURE_VALUE)
+            )
+
+
+            val aperture = srcExif.getAttribute(ExifInterface.TAG_F_NUMBER)
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_F_NUMBER,
+                aperture
+            )
+
+            val exposureTime = srcExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME)
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_EXPOSURE_TIME,
+                exposureTime
+            )
+
+            srcExif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS)?.let { isoSpeed ->
+                dstExif.setAttribute(
+                    ExifInterface.TAG_ISO_SPEED_RATINGS,
+                    isoSpeed
+                )
             }
-            if (meta.location != null) {
-                exif.setGpsInfo(meta.location!!)
+
+
+            srcExif.getAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY)
+                ?.let { photographicSensitivity ->
+                    dstExif.setAttribute(
+                        ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY,
+                        photographicSensitivity
+                    )
+                }
+
+
+            val make = srcExif.getAttribute(ExifInterface.TAG_MAKE)
+            dstExif.setAttribute(ExifInterface.TAG_MAKE, make)
+
+            val model = srcExif.getAttribute(ExifInterface.TAG_MODEL)
+            dstExif.setAttribute(ExifInterface.TAG_MODEL, model)
+
+            val lensModel = srcExif.getAttribute(ExifInterface.TAG_LENS_MODEL)
+            dstExif.setAttribute(ExifInterface.TAG_LENS_MODEL, lensModel)
+
+            val softwareVersion = srcExif.getAttribute(ExifInterface.TAG_SOFTWARE)
+            dstExif.setAttribute(ExifInterface.TAG_SOFTWARE, softwareVersion)
+
+            val focalLength = srcExif.getAttribute(ExifInterface.TAG_FOCAL_LENGTH)
+            dstExif.setAttribute(ExifInterface.TAG_FOCAL_LENGTH, focalLength)
+
+            try {
+                Exif.createFromImageProxy(image).location?.let {
+                    dstExif.setGpsInfo(it)
+                }
+            } catch (_: IOException) {
             }
-            exif.saveAttributes()
+
+            dstExif.saveAttributes()
+
 
             bm.recycle()
-            rotated.recycle()
             override?.recycle()
         } catch (e: Exception) {
             isError = true
@@ -1715,9 +1784,9 @@ class Camera2 @JvmOverloads constructor(
                             }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                            values.clear();
-                            values.put(MediaStore.Images.Media.IS_PENDING, 0);
-                            context.contentResolver.update(uri, values, null, null);
+                            values.clear()
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                            context.contentResolver.update(uri, values, null, null)
                         }
                         listener?.onCameraPhoto(file)
                     }

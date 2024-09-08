@@ -22,13 +22,13 @@ class Photo : AppCompatActivity() {
         imageView = findViewById(R.id.imageView)
         cameraView = findViewById(R.id.PhotoView)
         //FancyCamera.forceV1 = true
-        cameraView.defaultLens = CameraLens.telephoto
+        // cameraView.defaultLens = CameraLens.telephoto
         cameraView.autoFocus = true
         cameraView.saveToGallery = true
         cameraView.quality = Quality.HIGHEST
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onReadyUI() {
-                
+
             }
 
             override fun onCameraOpenUI() {
@@ -40,20 +40,16 @@ class Photo : AppCompatActivity() {
             }
 
             override fun onCameraPhotoUI(file: File?) {
-                imageView.setImageURI(Uri.fromFile(file))
+                file?.let { photo ->
+                    imageView.setImageURI(Uri.fromFile(photo))
+                }
             }
 
-            override fun onCameraVideoUI(file: File?) {
-                TODO("Not yet implemented")
-            }
+            override fun onCameraVideoUI(file: File?) {}
 
-            override fun onCameraVideoStartUI() {
-                TODO("Not yet implemented")
-            }
+            override fun onCameraVideoStartUI() {}
 
-            override fun onCameraAnalysisUI(analysis: ImageAnalysis) {
-                TODO("Not yet implemented")
-            }
+            override fun onCameraAnalysisUI(analysis: ImageAnalysis) {}
 
             override fun onCameraErrorUI(message: String, ex: Exception) {
                 println(message)
@@ -81,9 +77,9 @@ class Photo : AppCompatActivity() {
                 exception.printStackTrace()
             }
         })
-       // cameraView.saveToGallery = true
-       // cameraView.autoSquareCrop = true
-        cameraView.defaultLens = CameraLens.auto
+        // cameraView.saveToGallery = true
+       cameraView.autoSquareCrop = true
+       // cameraView.defaultLens = CameraLens.auto
     }
 
     fun takePhoto(view: View) {
@@ -116,7 +112,11 @@ class Photo : AppCompatActivity() {
         super.onPause()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         var count = 0
         for (grant in grantResults) {

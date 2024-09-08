@@ -6,7 +6,7 @@ android {
     buildToolsVersion BUILD_TOOLS_VERSION as String
     ndkVersion '23.2.8568313'
     defaultConfig {
-        minSdkVersion 17
+        minSdkVersion 21
         versionName = VERSION_NAME as String
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -33,8 +33,8 @@ dependencies {
     implementation 'androidx.databinding:databinding-runtime:8.3.2'
     //noinspection KtxExtensionAvailable
     testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test:runner:1.5.2'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     api "androidx.camera:camera-core:$camerax_version"
     api "androidx.camera:camera-camera2:$camerax_version"
     api "androidx.camera:camera-view:$camerax_view_version"
