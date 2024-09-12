@@ -1,27 +1,19 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 
 buildscript {
-    ext.kotlin_version = '1.7.10'
+    ext.kotlin_version = '1.8.22'
 
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:7.4.1'
+        classpath 'com.android.tools.build:gradle:8.3.2'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.vanniktech:gradle-maven-publish-plugin:0.18.0'
-        classpath 'org.jetbrains.dokka:dokka-gradle-plugin:1.4.10.2'
     }
 }
 
 allprojects {
-    plugins.withId("com.vanniktech.maven.publish") {
-        mavenPublish {
-            sonatypeHost = "S01"
-        }
-    }
-
     repositories {
         google()
         mavenCentral()
@@ -31,4 +23,37 @@ allprojects {
 
 task clean(type: Delete) {
     delete rootProject.buildDir
+}
+
+
+afterEvaluate {
+    if (project.hasProperty("android")
+            && project.name != 'pmd' ) {
+        android {
+            lint {
+                warningsAsErrors true
+                quiet true
+                // Caught by the violations plugin.
+                abortOnError false
+            }
+
+            // We don't need a BuildConfig constants class.
+            buildFeatures {
+                buildConfig = false
+            }
+
+            // Signing isn't relevant to a library. Our signing is done via
+            // a GPG key at upload time, there's no APK to sign.
+            buildTypes {
+                release {
+                    signingConfig signingConfigs.debug
+                }
+            }
+        }
+    }
+
+    if (project.tasks.findByName('check')) {
+        check.dependsOn('checkstyle')
+        check.finalizedBy violations
+    }
 }

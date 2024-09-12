@@ -17,6 +17,8 @@ import android.util.AttributeSet
 import android.util.SparseIntArray
 import android.view.Surface
 import android.widget.FrameLayout
+import androidx.databinding.ObservableList
+import java.util.ArrayList
 
 
 @SuppressLint("RestrictedApi")
@@ -33,6 +35,58 @@ class FancyCamera : FrameLayout {
     private var mEMA = 0.0
     private lateinit var cameraView: CameraBase
 
+    val imageProcessors: List<ImageProcessor<*>>
+        get() {
+            return cameraView.imageProcessors
+        }
+
+    fun addImageProcessor(processor: ImageProcessor<*>) {
+        cameraView.imageProcessors.add(processor)
+    }
+
+    fun addImageProcessors(processors: Array<ImageProcessor<*>>) {
+        cameraView.imageProcessors.addAll(processors)
+    }
+
+    fun removeImageProcessor(processor: ImageProcessor<*>) {
+        cameraView.imageProcessors.remove(processor)
+    }
+
+    fun removeImageProcessors(processors: Array<ImageProcessor<*>>) {
+        cameraView.imageProcessors.removeAll(processors.toSet())
+    }
+
+    fun clearImageProcessor() {
+        cameraView.imageProcessors.clear()
+    }
+
+    fun removeImageProcessor(type: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            cameraView.imageProcessors.removeIf {
+                it.type == type
+            }
+        } else {
+            val iterator = cameraView.imageProcessors.iterator()
+            while (iterator.hasNext()) {
+                val processor = iterator.next()
+                if (processor.type == type) {
+                    iterator.remove()
+                }
+            }
+        }
+    }
+
+    fun isWideAngleSupported(): Boolean {
+        return cameraView.isWideAngleSupported()
+    }
+
+    var defaultLens: CameraLens
+        get() {
+            return cameraView.defaultLens
+        }
+        set(value) {
+            cameraView.defaultLens = value
+        }
     var enableAudio: Boolean
         get() {
             return cameraView.enableAudio
@@ -70,7 +124,6 @@ class FancyCamera : FrameLayout {
             return cameraView.latestImage
         }
 
-
     var pause: Boolean
         get() {
             return cameraView.pause
@@ -94,26 +147,7 @@ class FancyCamera : FrameLayout {
         set(value) {
             cameraView.whiteBalance = value
         }
-    var detectorType: DetectorType
-        get() {
-            return cameraView.detectorType
-        }
-        set(value) {
-            cameraView.detectorType = value
-        }
 
-
-    fun setDetectorWithName(name: String?) {
-        if (name == null) {
-            detectorType = DetectorType.None
-            return
-        }
-
-        DetectorType.fromName(name)?.let { name ->
-            detectorType = name
-        }
-
-    }
 
     var ratio: String
         get() {
@@ -284,57 +318,6 @@ class FancyCamera : FrameLayout {
     fun setOnSelfieSegmentationListener(callback: ImageAnalysisCallback?) {
         cameraView.setOnSelfieSegmentationListener(callback)
     }
-
-    var barcodeScannerOptions: Any?
-        get() {
-            return cameraView.barcodeScannerOptions
-        }
-        set(value) {
-            if (CameraBase.isBarcodeScanningSupported) {
-                cameraView.barcodeScannerOptions = value
-            }
-        }
-
-    var faceDetectionOptions: Any?
-        get() {
-            return cameraView.faceDetectionOptions
-        }
-        set(value) {
-            if (CameraBase.isFaceDetectionSupported) {
-                cameraView.faceDetectionOptions = value
-            }
-        }
-
-    var imageLabelingOptions: Any?
-        get() {
-            return cameraView.imageLabelingOptions
-        }
-        set(value) {
-            if (CameraBase.isImageLabelingSupported) {
-                cameraView.imageLabelingOptions = value
-            }
-        }
-
-    var objectDetectionOptions: Any?
-        get() {
-            return cameraView.objectDetectionOptions
-        }
-        set(value) {
-            if (CameraBase.isObjectDetectionSupported) {
-                cameraView.objectDetectionOptions = value
-            }
-        }
-
-
-    var selfieSegmentationOptions: Any?
-        get() {
-            return cameraView.selfieSegmentationOptions
-        }
-        set(value) {
-            if (CameraBase.isSelfieSegmentationSupported) {
-                cameraView.selfieSegmentationOptions = value
-            }
-        }
 
 
     var overridePhotoWidth: Int

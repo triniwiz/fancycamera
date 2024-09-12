@@ -1,6 +1,7 @@
 package io.github.triniwiz.fancycamera.barcodescanning
 
 import android.graphics.Rect
+import com.google.gson.annotations.SerializedName
 import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.*
 
@@ -38,9 +39,16 @@ class Result(barcode: Barcode) {
         }
 
         enum class EncryptionType(val type: String) {
+            @SerializedName("open")
             Open("open"),
+
+            @SerializedName("wpa")
             WPA("wpa"),
+
+            @SerializedName("wep")
             WEP("wep"),
+
+            @SerializedName("unknown")
             Unknown("unknown")
         }
     }
@@ -71,10 +79,19 @@ class Result(barcode: Barcode) {
         }
 
         enum class Type(val typeName: String) {
+            @SerializedName("unknown")
             Unknown("unknown"),
+
+            @SerializedName("home")
             Home("home"),
+
+            @SerializedName("work")
             Work("work"),
+
+            @SerializedName("fax")
             Fax("fax"),
+
+            @SerializedName("mobile")
             Mobile("mobile")
         }
     }
@@ -95,8 +112,13 @@ class Result(barcode: Barcode) {
         }
 
         enum class Type(val typeName: String) {
+            @SerializedName("unknown")
             Unknown("unknown"),
+
+            @SerializedName("home")
             Home("home"),
+
+            @SerializedName("work")
             Work("work")
         }
     }
@@ -119,8 +141,10 @@ class Result(barcode: Barcode) {
     }
 
 
-    class CalenderEvent(event:
-                        Barcode.CalendarEvent) {
+    class CalenderEvent(
+        event:
+        Barcode.CalendarEvent
+    ) {
         val description = event.description
         val location = event.location
         val organizer = event.organizer
@@ -158,7 +182,7 @@ class Result(barcode: Barcode) {
             val addressList = mutableListOf<Address>()
             for (address in info.addresses) {
                 addressList.add(
-                        Address(address)
+                    Address(address)
                 )
             }
             addresses = addressList.toTypedArray()
@@ -179,21 +203,27 @@ class Result(barcode: Barcode) {
             }
 
             enum class Type(val typeName: String) {
+                @SerializedName("unknown")
                 Unknown("unknown"),
+
+                @SerializedName("home")
                 Home("home"),
+
+                @SerializedName("work")
                 Work("work")
             }
         }
     }
 
     class Bounds(rect: Rect) {
-        class Origin(val x: Int, val y: Int)
-        class Size(val width: Int,
-                   val height: Int)
 
-        val origin = Origin(rect.left, rect.top)
-        val size = Size(rect.width(), rect.height())
+        val x: Int = rect.left
 
+        val y: Int = rect.top
+
+        val width: Int = rect.width()
+
+        val height: Int = rect.height()
     }
 
     class Point(point: android.graphics.Point) {
@@ -209,18 +239,43 @@ class Result(barcode: Barcode) {
     }
 
     enum class ValueType(val type: String) {
+        @SerializedName("contactInfo")
         ContactInfo("contactInfo"),
+
+        @SerializedName("email")
         Email("email"),
+
+        @SerializedName("isbn")
         ISBN("isbn"),
+
+        @SerializedName("phone")
         Phone("phone"),
+
+        @SerializedName("product")
         Product("product"),
+
+        @SerializedName("text")
         Text("text"),
+
+        @SerializedName("sms")
         Sms("sms"),
+
+        @SerializedName("url")
         URL("url"),
+
+        @SerializedName("wifi")
         WiFi("wifi"),
+
+        @SerializedName("geo")
         Geo("geo"),
+
+        @SerializedName("calender")
         CalenderEvent("calender"),
+
+        @SerializedName("driverLicense")
         DriverLicense("driverLicense"),
+
+        @SerializedName("unknown")
         Unknown("unknown")
     }
 
@@ -259,6 +314,6 @@ class Result(barcode: Barcode) {
         }
         this.points = points.toTypedArray()
         format = BarcodeScanner.BarcodeFormat.fromBarcode(barcode.format)
-                ?: BarcodeScanner.BarcodeFormat.ALL
+            ?: BarcodeScanner.BarcodeFormat.ALL
     }
 }

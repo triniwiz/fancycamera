@@ -1,17 +1,18 @@
 package io.github.triniwiz.fancycamera
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.*
 import android.hardware.camera2.*
-import android.media.Image
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.AttributeSet
 import android.util.Log
+import android.util.Range
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
@@ -21,45 +22,51 @@ import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.*
 import androidx.camera.core.ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
+import androidx.camera.core.impl.utils.Exif
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.*
-import androidx.camera.video.VideoCapture
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.net.ParseException
 import androidx.core.view.GestureDetectorCompat
+import androidx.databinding.ObservableArrayList
+import androidx.databinding.ObservableList
+import androidx.databinding.ObservableList.OnListChangedCallback
 import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.LifecycleOwner
-import com.google.android.gms.tasks.Task
-import com.google.android.gms.tasks.TaskCompletionSource
-import com.google.android.gms.tasks.Tasks
 import com.google.common.util.concurrent.ListenableFuture
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.text.ParseException
+import java.io.InputStream
+import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 
-@SuppressLint("UnsafeOptInUsageError")
+@SuppressLint("UnsafeOptInUsageError", "RestrictedApi")
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 class Camera2 @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyleAttr: Int = 0
 ) : CameraBase(context, attrs, defStyleAttr) {
+
     private var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
+
     private var cameraProvider: ProcessCameraProvider? = null
+
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: androidx.camera.core.ImageAnalysis? = null
     private var videoCapture: VideoCapture<Recorder>? = null
-    private var imageAnalysisExecutor = Executors.newSingleThreadExecutor()
-    private var imageCaptureExecutor = Executors.newSingleThreadExecutor()
-    private var videoCaptureExecutor = Executors.newSingleThreadExecutor()
+    private var executor = Executors.newSingleThreadExecutor()
     private var camera: androidx.camera.core.Camera? = null
     private var preview: Preview? = null
-    private var surfaceRequest: SurfaceRequest? = null
     private var isStarted = false
     private var isRecording = false
     private var file: File? = null
@@ -73,6 +80,56 @@ class Camera2 @JvmOverloads constructor(
 
     override var enablePinchZoom: Boolean = true
     override var enableTapToFocus: Boolean = true
+
+    override var imageProcessors: ObservableList<ImageProcessor<*>> =
+        ObservableArrayList<ImageProcessor<*>>()
+            .apply {
+                val callback: OnListChangedCallback<ObservableList<ImageProcessor<Any>>> =
+                    object : OnListChangedCallback<ObservableList<ImageProcessor<Any>>>() {
+                        override fun onChanged(sender: ObservableList<ImageProcessor<Any>>?) {}
+
+                        override fun onItemRangeChanged(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeInserted(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeMoved(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            fromPosition: Int,
+                            toPosition: Int,
+                            itemCount: Int
+                        ) {
+                            // noop
+                        }
+
+                        override fun onItemRangeRemoved(
+                            sender: ObservableList<ImageProcessor<Any>>?,
+                            positionStart: Int,
+                            itemCount: Int
+                        ) {
+                            if (sender?.isEmpty() == true) {
+
+                            }
+                        }
+                    }
+                addOnListChangedCallback(callback)
+            }
+    override var defaultLens: CameraLens = CameraLens.telephoto
+        set(value) {
+            field = value
+            refreshCamera()
+        }
 
     override var retrieveLatestImage: Boolean = false
         set(value) {
@@ -97,15 +154,15 @@ class Camera2 @JvmOverloads constructor(
         // handles the case where: user changes the zoom before camera is ready, apply it when camera ready
         // user changes zoom after camera is ready, this will trigger on the zoom setter
         camera?.cameraControl?.let {
-            var zoomChanged = true;
+            var zoomChanged = true
             if (storedZoom > 0) {
                 it.setLinearZoom(storedZoom)
                 storedZoom = -1f
-            } else if(storedZoomRatio > 0) {
+            } else if (storedZoomRatio > 0) {
                 it.setZoomRatio(storedZoomRatio)
                 storedZoomRatio = -1f
             } else {
-                zoomChanged = false;
+                zoomChanged = false
             }
             if (zoomChanged) {
                 onZoomChange()
@@ -113,16 +170,16 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-
     override val previewSurface: Any
         get() {
             return previewView
         }
     val maxZoomRatio: Float
-        get() = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f;
+        get() = camera?.cameraInfo?.zoomState?.value?.maxZoomRatio ?: 1f
     val minZoomRatio: Float
-        get() = camera?.cameraInfo?.zoomState?.value?.minZoomRatio ?: 1f;
-    var storedZoomRatio: Float = -1F;
+        get() = camera?.cameraInfo?.zoomState?.value?.minZoomRatio ?: 1f
+
+    var storedZoomRatio: Float = -1F
     override var zoomRatio: Float
         get() = camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1f
         set(value) {
@@ -134,15 +191,18 @@ class Camera2 @JvmOverloads constructor(
     var storedZoom: Float = -1.0F
 
     override var zoom: Float
-        get() = camera?.cameraInfo?.zoomState?.value?.linearZoom ?: ( if (storedZoom < 0) 0.0f else storedZoom)
+        get() = camera?.cameraInfo?.zoomState?.value?.linearZoom
+            ?: (if (storedZoom < 0) 0.0f else storedZoom)
         set(value) {
             storedZoom = when {
                 value > 1 -> {
                     1f
                 }
+
                 value < 0 -> {
                     0f
                 }
+
                 else -> {
                     value
                 }
@@ -152,8 +212,8 @@ class Camera2 @JvmOverloads constructor(
         }
     override var whiteBalance: WhiteBalance = WhiteBalance.Auto
         set(value) {
+            field = value
             if (!isRecording) {
-                field = value
                 refreshCamera()
             }
         }
@@ -164,6 +224,7 @@ class Camera2 @JvmOverloads constructor(
                 "16:9" -> {
                     value
                 }
+
                 "4:3" -> value
                 else -> return
             }
@@ -194,313 +255,6 @@ class Camera2 @JvmOverloads constructor(
 
     private var previewView: PreviewView = PreviewView(context, attrs, defStyleAttr)
 
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleBarcodeScanning(proxy: ImageProxy): Task<Boolean>? {
-        if (!isBarcodeScanningSupported || !(detectorType == DetectorType.Barcode || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val BarcodeScannerClazz =
-            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner")
-        val barcodeScanner = BarcodeScannerClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val BarcodeScannerOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner\$Options")
-        val processImageMethod = BarcodeScannerClazz.getDeclaredMethod(
-            "processImage",
-            InputImageClazz,
-            BarcodeScannerOptionsClazz
-        )
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(
-            barcodeScanner,
-            inputImage,
-            barcodeScannerOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onBarcodeScanningListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onBarcodeScanningListener?.onError(
-                    it.message
-                        ?: "Failed to complete face detection.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleFaceDetection(proxy: ImageProxy): Task<Boolean>? {
-        if (!isFaceDetectionSupported || !(detectorType == DetectorType.Face || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val FaceDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection")
-        val faceDetection = FaceDetectionClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val FaceDetectionOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.facedetection.FaceDetection\$Options")
-        val processImageMethod = FaceDetectionClazz.getDeclaredMethod(
-            "processImage",
-            InputImageClazz,
-            FaceDetectionOptionsClazz
-        )
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(
-            faceDetection,
-            inputImage,
-            faceDetectionOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onFacesDetectedListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onFacesDetectedListener?.onError(
-                    it.message
-                        ?: "Failed to complete face detection.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleImageLabeling(proxy: ImageProxy): Task<Boolean>? {
-        if (!isImageLabelingSupported || !(detectorType == DetectorType.Image || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val ImageLabelingClazz =
-            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling")
-        val imageLabeling = ImageLabelingClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val ImageLabelingOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.imagelabeling.ImageLabeling\$Options")
-        val processImageMethod = ImageLabelingClazz.getDeclaredMethod(
-            "processImage",
-            InputImageClazz,
-            ImageLabelingOptionsClazz
-        )
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(
-            imageLabeling,
-            inputImage,
-            imageLabelingOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onImageLabelingListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onImageLabelingListener?.onError(
-                    it.message
-                        ?: "Failed to complete face detection.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleObjectDetection(proxy: ImageProxy): Task<Boolean>? {
-        if (!isObjectDetectionSupported || !(detectorType == DetectorType.Object || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val ObjectDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection")
-        val objectDetection = ObjectDetectionClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val ObjectDetectionOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.objectdetection.ObjectDetection\$Options")
-        val processImageMethod = ObjectDetectionClazz.getDeclaredMethod(
-            "processImage",
-            InputImageClazz,
-            ObjectDetectionOptionsClazz
-        )
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(
-            objectDetection,
-            inputImage,
-            objectDetectionOptions!!
-        ) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onObjectDetectedListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onObjectDetectedListener?.onError(
-                    it.message
-                        ?: "Failed to complete face detection.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handlePoseDetection(proxy: ImageProxy): Task<Boolean>? {
-        if (!isPoseDetectionSupported || !(detectorType == DetectorType.Pose || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val PoseDetectionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.posedetection.PoseDetection")
-        val poseDetection = PoseDetectionClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val processImageMethod =
-            PoseDetectionClazz.getDeclaredMethod("processImage", InputImageClazz)
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(poseDetection, inputImage) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onPoseDetectedListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onPoseDetectedListener?.onError(
-                    it.message
-                        ?: "Failed to complete text recognition.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleTextRecognition(proxy: ImageProxy): Task<Boolean>? {
-        if (!isTextRecognitionSupported || !(detectorType == DetectorType.Text || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val TextRecognitionClazz =
-            Class.forName("io.github.triniwiz.fancycamera.textrecognition.TextRecognition")
-        val textRecognition = TextRecognitionClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-        val processImageMethod =
-            TextRecognitionClazz.getDeclaredMethod("processImage", InputImageClazz)
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(textRecognition, inputImage) as Task<String>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it.isNotEmpty()) {
-                mainHandler.post {
-                    onTextRecognitionListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onTextRecognitionListener?.onError(
-                    it.message
-                        ?: "Failed to complete text recognition.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
-    @SuppressLint("UnsafeOptInUsageError")
-    private fun handleSelfieSegmentation(proxy: ImageProxy): Task<Boolean>? {
-        if (!isSelfieSegmentationSupported || !(detectorType == DetectorType.Selfie || detectorType == DetectorType.All)) {
-            return null
-        }
-        val image = proxy.image ?: return null
-        val rotationAngle = proxy.imageInfo.rotationDegrees
-        val InputImageClazz = Class.forName("com.google.mlkit.vision.common.InputImage")
-        val SelfieSegmentationClazz =
-            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation")
-        val selfieSegmentation = SelfieSegmentationClazz.newInstance()
-        val fromMediaImage =
-            InputImageClazz.getMethod("fromMediaImage", Image::class.java, Int::class.java)
-        val inputImage = fromMediaImage.invoke(null, image, rotationAngle)
-
-        val SelfieSegmentationOptionsClazz =
-            Class.forName("io.github.triniwiz.fancycamera.selfiesegmentation.SelfieSegmentation\$Options")
-
-        val processImageMethod = SelfieSegmentationClazz.getDeclaredMethod(
-            "processImage",
-            InputImageClazz,
-            SelfieSegmentationOptionsClazz
-        )
-
-        val returnTask = TaskCompletionSource<Boolean>()
-        val task = processImageMethod.invoke(
-            selfieSegmentation,
-            inputImage,
-            selfieSegmentationOptions
-        ) as Task<Any>
-        task.addOnSuccessListener(imageAnalysisExecutor) {
-            if (it != null) {
-                mainHandler.post {
-                    onSelfieSegmentationListener?.onSuccess(it)
-                }
-            }
-        }.addOnFailureListener(imageAnalysisExecutor) {
-            mainHandler.post {
-                onSelfieSegmentationListener?.onError(
-                    it.message
-                        ?: "Failed to complete text recognition.", it
-                )
-            }
-        }.addOnCompleteListener(imageAnalysisExecutor) {
-            returnTask.setResult(true)
-        }
-        return returnTask.task
-    }
-
     private fun getFocusMeteringActions(): Int {
         var actions = FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
         if (whiteBalance == WhiteBalance.Auto) {
@@ -515,9 +269,29 @@ class Camera2 @JvmOverloads constructor(
         autoFocusTimer = null
     }
 
+    private var scaleFactor = 1F
+    var deviceCameraInfo = mutableListOf<CameraInfo>()
+        private set
+
+    val currentCameraInfo: CameraInfo?
+        get() {
+            if (camera != null) {
+                val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                return CameraInfo(
+                    info.cameraId,
+                    camera!!.cameraInfo.implementationType,
+                    CameraxCameraCharacteristicsImpl(info)
+                )
+            }
+            return null
+        }
+
+    private var wideCameraInfo: androidx.camera.core.CameraInfo? = null
     private fun setupGestureListeners() {
+
         val listener =
-            object : ScaleGestureDetector.SimpleOnScaleGestureListener(), GestureDetector.OnGestureListener {
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener(),
+                GestureDetector.OnGestureListener {
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
                     camera?.cameraInfo?.zoomState?.value?.let { zoomState ->
                         camera?.cameraControl?.setZoomRatio(
@@ -528,7 +302,7 @@ class Camera2 @JvmOverloads constructor(
                     return true
                 }
 
-                override fun onDown(p0: MotionEvent): Boolean = false
+                override fun onDown(p0: MotionEvent): Boolean = true
 
                 override fun onShowPress(p0: MotionEvent) = Unit
 
@@ -560,16 +334,16 @@ class Camera2 @JvmOverloads constructor(
                 }
 
                 override fun onScroll(
-                    p0: MotionEvent,
+                    p0: MotionEvent?,
                     p1: MotionEvent,
                     p2: Float,
                     p3: Float
-                ): Boolean  = false
+                ): Boolean = false
 
                 override fun onLongPress(p0: MotionEvent) = Unit
 
                 override fun onFling(
-                    p0: MotionEvent,
+                    p0: MotionEvent?,
                     p1: MotionEvent,
                     p2: Float,
                     p3: Float
@@ -579,13 +353,22 @@ class Camera2 @JvmOverloads constructor(
         val scaleGestureDetector = ScaleGestureDetector(context, listener)
         val gestureDetectorCompat = GestureDetectorCompat(context, listener)
         previewView.setOnTouchListener { view, event ->
-            if (enablePinchZoom) scaleGestureDetector.onTouchEvent(event)
-            if (enableTapToFocus) gestureDetectorCompat.onTouchEvent(event)
+            var consumed = false
+            if (enablePinchZoom) {
+                consumed = scaleGestureDetector.onTouchEvent(event)
+            }
+            if (!scaleGestureDetector.isInProgress && enableTapToFocus) {
+                consumed = gestureDetectorCompat.onTouchEvent(event)
+            }
             view.performClick()
-            true
+            consumed
         }
     }
 
+
+    fun setCameraWithId(id: String) {
+
+    }
 
     init {
         setupGestureListeners()
@@ -593,14 +376,37 @@ class Camera2 @JvmOverloads constructor(
             handleAutoFocus()
         }
         addView(previewView)
-        detectSupport()
-        initOptions()
 
         // TODO: Bind this to the view's onCreate method
         cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+
         cameraProviderFuture.addListener({
             try {
                 cameraProvider?.unbindAll()
+                cameraProviderFuture.get()?.let {
+                    cameraProvider = it
+                    deviceCameraInfo.clear()
+                    it.availableCameraInfos.forEach { ci ->
+                        val info = Camera2CameraInfo.from((ci))
+                        deviceCameraInfo.add(
+                            CameraInfo(
+                                info.cameraId,
+                                ci.implementationType,
+                                CameraxCameraCharacteristicsImpl(info)
+                            )
+                        )
+                    }
+                    it.availableCameraInfos.minByOrNull { info ->
+                        info.intrinsicZoomRatio
+                    }?.let { info ->
+                        if (!mIsWideAngleSupported) {
+                            mIsWideAngleSupported = info.intrinsicZoomRatio < 1.0
+                            if (mIsWideAngleSupported) {
+                                wideCameraInfo = info
+                            }
+                        }
+                    }
+                }
                 cameraProvider = cameraProviderFuture.get()
                 refreshCamera() // or just initPreview() ?
             } catch (e: Exception) {
@@ -610,12 +416,18 @@ class Camera2 @JvmOverloads constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    private var mIsWideAngleSupported = false
+
+    override fun isWideAngleSupported(): Boolean {
+        return mIsWideAngleSupported
+    }
+
     private fun handleAutoFocus() {
         if (camera?.cameraControl == null) {
             pendingAutoFocus = true
-            return;
+            return
         }
-        pendingAutoFocus = false;
+        pendingAutoFocus = false
         if (autoFocus) {
             val factory: MeteringPointFactory = SurfaceOrientedMeteringPointFactory(
                 previewView.width.toFloat(), previewView.height.toFloat()
@@ -624,16 +436,19 @@ class Camera2 @JvmOverloads constructor(
             val centerHeight = previewView.height.toFloat() / 2
             val autoFocusPoint = factory.createPoint(centerWidth, centerHeight)
             try {
-                val action =FocusMeteringAction.Builder(
+                val action = FocusMeteringAction.Builder(
                     autoFocusPoint,
                     getFocusMeteringActions()
                 ).apply {
                     setAutoCancelDuration(2, TimeUnit.SECONDS)
                 }.build();
                 val supported = camera?.cameraInfo?.isFocusMeteringSupported(action)
-                camera?.cameraControl?.startFocusAndMetering(
-                    action
-                )
+                if (supported == true) {
+                    camera?.cameraControl?.startFocusAndMetering(
+                        action
+                    )
+                }
+
             } catch (_: CameraInfoUnavailableException) {
             }
         }
@@ -647,38 +462,6 @@ class Camera2 @JvmOverloads constructor(
     override var maxVideoBitrate: Int = -1
     override var maxVideoFrameRate: Int = -1
     override var disableHEVC: Boolean = false
-
-
-    override var detectorType: DetectorType = DetectorType.None
-        @SuppressLint("UnsafeOptInUsageError")
-        set(value) {
-            field = value
-            if (!isRecording) {
-                if (imageAnalysis == null) {
-                    setUpAnalysis()
-                }
-                if (value == DetectorType.None) {
-                    if (cameraProvider?.isBound(imageAnalysis!!) == true) {
-                        cameraProvider?.unbind(imageAnalysis!!)
-                    }
-                } else {
-                    videoCapture?.let {
-                        if (cameraProvider?.isBound(it) == true) {
-                            cameraProvider?.unbind(it)
-                        }
-                    }
-
-                    if (cameraProvider?.isBound(imageAnalysis!!) == false) {
-                        camera = cameraProvider?.bindToLifecycle(
-                            context as LifecycleOwner,
-                            selectorFromPosition(),
-                            imageAnalysis
-                        )
-                        handleAutoFocus()
-                    }
-                }
-            }
-        }
 
     override val numberOfCameras: Int
         get() {
@@ -694,7 +477,10 @@ class Camera2 @JvmOverloads constructor(
         }
 
     private fun getFlashMode(): Int {
-        var test = camera?.cameraInfo?.hasFlashUnit();
+        val test = camera?.cameraInfo?.hasFlashUnit()
+        if (test != null && !test) {
+            return ImageCapture.FLASH_MODE_OFF
+        }
         return when (flashMode) {
             CameraFlashMode.AUTO -> ImageCapture.FLASH_MODE_AUTO
             CameraFlashMode.ON -> ImageCapture.FLASH_MODE_ON
@@ -704,14 +490,104 @@ class Camera2 @JvmOverloads constructor(
 
     override var position: CameraPosition = CameraPosition.BACK
 
+
+    var frontCameraId: String? = null
+        set(value) {
+            field = value
+            if (!isRecording && position == CameraPosition.FRONT) {
+                if (camera?.cameraInfo != null) {
+                    val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                    if (value == info.cameraId) {
+                        return
+                    }
+                }
+                refreshCamera()
+            }
+        }
+
+    var backCameraId: String? = null
+        set(value) {
+            field = value
+            if (!isRecording && position == CameraPosition.BACK) {
+                if (camera?.cameraInfo != null) {
+                    val info = Camera2CameraInfo.from(camera!!.cameraInfo)
+                    if (value == info.cameraId) {
+                        return
+                    }
+                }
+                refreshCamera()
+            }
+        }
+
+    // todo
+    var externalCameraId: String? = null
+
     private fun selectorFromPosition(): CameraSelector {
         return CameraSelector.Builder()
             .apply {
-                if (position == CameraPosition.FRONT) {
-                    requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                if (position == CameraPosition.FRONT && frontCameraId != null) {
+                    addCameraFilter { infos ->
+                        infos.filter {
+                            val info = Camera2CameraInfo.from(it)
+                            info.cameraId == frontCameraId!!
+                        }.toMutableList()
+                    }
+                } else if (position == CameraPosition.BACK && backCameraId != null) {
+                    addCameraFilter { infos ->
+                        infos.filter {
+                            val info = Camera2CameraInfo.from(it)
+                            info.cameraId == backCameraId!!
+                        }.toMutableList()
+                    }
                 } else {
-                    requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                    if (isWideAngleSupported()) {
+                        if (defaultLens == CameraLens.auto) {
+                            if (position == CameraPosition.FRONT) {
+                                requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                            } else {
+                                requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                            }
+                        } else {
+                            addCameraFilter {
+                                it.filter { info ->
+                                    if (info.lensFacing == CameraSelector.LENS_FACING_EXTERNAL || info.lensFacing == CameraSelector.LENS_FACING_UNKNOWN) {
+                                        false
+                                    } else if (position.lenFacing != info.lensFacing) {
+                                        false
+                                    } else {
+                                        when (defaultLens) {
+                                            CameraLens.telephoto -> {
+                                                if (info.intrinsicZoomRatio >= 1.0) {
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            }
+
+                                            CameraLens.wide, CameraLens.ultrawide -> {
+                                                if (info.intrinsicZoomRatio < 1.0) {
+                                                    true
+                                                } else {
+                                                    false
+                                                }
+                                            }
+
+                                            CameraLens.auto -> true
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                    } else {
+                        if (position == CameraPosition.FRONT) {
+                            requireLensFacing(CameraSelector.LENS_FACING_FRONT)
+                        } else {
+                            requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                        }
+                    }
                 }
+
             }
             .build()
     }
@@ -720,7 +596,7 @@ class Camera2 @JvmOverloads constructor(
      * TODO: link this to the code, overriding or affecting targetRotation logic */
     override var rotation: CameraOrientation = CameraOrientation.UNKNOWN
 
-    @SuppressLint("RestrictedApi", "UnsafeExperimentalUsageError")
+    @SuppressLint("UnsafeExperimentalUsageError")
     override fun orientationUpdated() {
         val rotation = when (currentOrientation) {
             270 -> Surface.ROTATION_270
@@ -740,6 +616,32 @@ class Camera2 @JvmOverloads constructor(
             CameraOrientation.LANDSCAPE_LEFT -> Surface.ROTATION_0
             CameraOrientation.LANDSCAPE_RIGHT -> Surface.ROTATION_180
             else -> -1
+        }
+    }
+
+    private fun bindDefaultUseCase() {
+        if (imageAnalysis != null && imageProcessors.isNotEmpty()) {
+            (context as? Activity)?.let {
+                it.runOnUiThread {
+                    camera = cameraProvider?.bindToLifecycle(
+                        context as LifecycleOwner,
+                        selectorFromPosition(),
+                        imageAnalysis,
+                        preview
+                    )
+                    handleAutoFocus()
+                }
+            }
+            return
+        }
+        (context as? Activity)?.let {
+            it.runOnUiThread {
+                camera = cameraProvider?.bindToLifecycle(
+                    context as LifecycleOwner,
+                    selectorFromPosition(),
+                    preview
+                )
+            }
         }
     }
 
@@ -809,74 +711,122 @@ class Camera2 @JvmOverloads constructor(
     private fun setUpAnalysis() {
         val builder = androidx.camera.core.ImageAnalysis.Builder()
             .apply {
-                if (getDeviceRotation() > -1) {
-                    setTargetRotation(getDeviceRotation())
-                }
                 setBackpressureStrategy(STRATEGY_KEEP_ONLY_LATEST)
             }
-        val extender = Camera2Interop.Extender(builder)
         imageAnalysis = builder.build()
-        imageAnalysis?.setAnalyzer(imageAnalysisExecutor) {
-
-            if (it.image != null && currentFrame != processEveryNthFrame) {
-                incrementCurrentFrame()
-                return@setAnalyzer
-            }
-
-            if (retrieveLatestImage) {
-                latestImage = BitmapUtils.getBitmap(it)
-            }
-
-            if (it.image != null) {
-                val tasks = mutableListOf<Task<*>>()
-                //BarcodeScanning
-                val barcodeTask = handleBarcodeScanning(it)
-                if (barcodeTask != null) {
-                    tasks.add(barcodeTask)
+        imageAnalysis?.setAnalyzer(executor) { proxy ->
+            proxy.image?.let { image ->
+                if (currentFrame < processEveryNthFrame) {
+                    incrementCurrentFrame()
+                    proxy.close()
+                    return@setAnalyzer
                 }
 
-                // FaceDetection
-                val faceTask = handleFaceDetection(it)
-                if (faceTask != null) {
-                    tasks.add(faceTask)
+                if (retrieveLatestImage) {
+                    latestImage = BitmapUtils.getBitmap(proxy)
                 }
 
-                //PoseDetection
-                val poseTask = handlePoseDetection(it)
-                if (poseTask != null) {
-                    tasks.add(poseTask)
-                }
+                if (imageProcessors.isNotEmpty()) {
+                    executor.execute {
+                        for (processor in imageProcessors) {
+                            val process = processor.process(image, proxy.imageInfo.rotationDegrees)
+                            try {
+                                process.run()
+                                val result = process.get()
+                                if (result != null) {
+                                    if ((0..6).contains(processor.type) && result is String && result.isEmpty()) {
+                                        continue
+                                    }
+                                    when (processor.type) {
+                                        0 -> {
+                                            onBarcodeScanningListener?.onSuccess(result)
+                                        }
 
-                //ImageLabeling
-                val imageTask = handleImageLabeling(it)
-                if (imageTask != null) {
-                    tasks.add(imageTask)
-                }
+                                        1 -> {
+                                            onFacesDetectedListener?.onSuccess(result)
+                                        }
 
-                //ObjectDetection
-                val objectTask = handleObjectDetection(it)
-                if (objectTask != null) {
-                    tasks.add(objectTask)
-                }
+                                        2 -> {
+                                            onImageLabelingListener?.onSuccess(result)
+                                        }
 
-                // TextRecognition
-                val textTask = handleTextRecognition(it)
-                if (textTask != null) {
-                    tasks.add(textTask)
-                }
+                                        3 -> {
+                                            onObjectDetectedListener?.onSuccess(result)
+                                        }
 
-                // SelfieSegmentation
-                val selfieTask = handleSelfieSegmentation(it)
-                if (selfieTask != null) {
-                    tasks.add(selfieTask)
-                }
+                                        4 -> {
+                                            onPoseDetectedListener?.onSuccess(result)
+                                        }
 
-                if (tasks.isNotEmpty()) {
-                    val proxy = it
-                    Tasks.whenAllComplete(tasks).addOnCompleteListener {
+                                        5 -> {
+                                            onSelfieSegmentationListener?.onSuccess(result)
+                                        }
+
+                                        6 -> {
+                                            onTextRecognitionListener?.onSuccess(result)
+                                        }
+
+                                        else -> {}
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                when (processor.type) {
+                                    0 -> {
+                                        onBarcodeScanningListener?.onError(
+                                            e.message ?: "Failed to complete barcode scanning.", e
+                                        )
+                                    }
+
+                                    1 -> {
+                                        onFacesDetectedListener?.onError(
+                                            e.message ?: "Failed to complete face detection.", e
+                                        )
+                                    }
+
+                                    2 -> {
+                                        onImageLabelingListener?.onError(
+                                            e.message
+                                                ?: "Failed to complete image label detection.", e
+                                        )
+                                    }
+
+                                    3 -> {
+                                        onObjectDetectedListener?.onError(
+                                            e.message ?: "Failed to complete object detection.", e
+                                        )
+                                    }
+
+                                    4 -> {
+                                        onPoseDetectedListener?.onError(
+                                            e.message ?: "Failed to complete pose detection.", e
+                                        )
+                                    }
+
+                                    5 -> {
+                                        onSelfieSegmentationListener?.onError(
+                                            e.message
+                                                ?: "Failed to complete selfie segmentation detection.",
+                                            e
+                                        )
+                                    }
+
+                                    6 -> {
+                                        onTextRecognitionListener?.onError(
+                                            e.message ?: "Failed to complete text recognition.", e
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    executor.execute {
                         proxy.close()
                         resetCurrentFrame()
                     }
+                } else {
+                    proxy.close()
+                    resetCurrentFrame()
                 }
             }
         }
@@ -896,31 +846,50 @@ class Camera2 @JvmOverloads constructor(
             }
         }
 
-        val builder = ImageCapture.Builder().apply {
 
+        val builder = ImageCapture.Builder().apply {
             if (getDeviceRotation() > -1) {
                 setTargetRotation(getDeviceRotation())
             }
             if (pictureSize == "0x0") {
-                setTargetAspectRatio(
-                    when (displayRatio) {
-                        "16:9" -> AspectRatio.RATIO_16_9
-                        else -> AspectRatio.RATIO_4_3
-                    }
+                setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .apply {
+                            setAspectRatioStrategy(
+                                AspectRatioStrategy(
+                                    when (displayRatio) {
+                                        "16:9" -> AspectRatio.RATIO_16_9
+                                        else -> AspectRatio.RATIO_4_3
+                                    }, AspectRatioStrategy.FALLBACK_RULE_AUTO
+                                )
+                            )
+                        }
+                        .build()
                 )
             } else {
-                try {
-                    setTargetResolution(
-                        android.util.Size.parseSize(pictureSize)
-                    )
-                } catch (e: Exception) {
-                    setTargetAspectRatio(
-                        when (displayRatio) {
-                            "16:9" -> AspectRatio.RATIO_16_9
-                            else -> AspectRatio.RATIO_4_3
+                setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .apply {
+                            try {
+                                setResolutionStrategy(
+                                    ResolutionStrategy(
+                                        android.util.Size.parseSize(pictureSize),
+                                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                                    )
+                                )
+                            } catch (e: Exception) {
+                                setAspectRatioStrategy(
+                                    AspectRatioStrategy(
+                                        when (displayRatio) {
+                                            "16:9" -> AspectRatio.RATIO_16_9
+                                            else -> AspectRatio.RATIO_4_3
+                                        }, AspectRatioStrategy.FALLBACK_RULE_AUTO
+                                    )
+                                )
+                            }
                         }
-                    )
-                }
+                        .build()
+                )
             }
             setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
             setFlashMode(getFlashMode())
@@ -928,42 +897,50 @@ class Camera2 @JvmOverloads constructor(
 
         val extender = Camera2Interop.Extender(builder)
 
+
         when (whiteBalance) {
             WhiteBalance.Auto -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_AUTO
                 )
             }
+
             WhiteBalance.Sunny -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_DAYLIGHT
                 )
             }
+
             WhiteBalance.Cloudy -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT
                 )
             }
+
             WhiteBalance.Shadow -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_SHADE
                 )
             }
+
             WhiteBalance.Twilight -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_TWILIGHT
                 )
             }
+
             WhiteBalance.Fluorescent -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_FLUORESCENT
                 )
             }
+
             WhiteBalance.Incandescent -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_INCANDESCENT
                 )
             }
+
             WhiteBalance.WarmFluorescent -> {
                 extender.setCaptureRequestOption(
                     CaptureRequest.CONTROL_AWB_MODE,
@@ -973,64 +950,216 @@ class Camera2 @JvmOverloads constructor(
         }
 
         // handle ultra wide af mode
-        if (camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1.0f < 1.0f) {
-            extender.setCaptureRequestOption(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+        if ((camera?.cameraInfo?.zoomState?.value?.zoomRatio ?: 1.0f) < 1.0f) {
+            extender.setCaptureRequestOption(
+                CaptureRequest.CONTROL_AF_MODE,
+                CaptureRequest.CONTROL_AF_MODE_OFF
+            )
         }
+
 
         imageCapture = builder.build()
 
         if (wasBounded || autoBound) {
             cameraProvider?.let { cameraProvider ->
-                if (cameraProvider.isBound(imageCapture!!)) {
-                    cameraProvider.bindToLifecycle(
-                        context as LifecycleOwner,
-                        selectorFromPosition(),
-                        imageCapture!!,
-                        preview!!
-                    )
-                }
+                camera = cameraProvider.bindToLifecycle(
+                    context as LifecycleOwner,
+                    selectorFromPosition(),
+                    imageCapture!!,
+                    preview!!
+                )
             }
         }
     }
 
+    interface CameraCharacteristicsImpl {
+        fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T?
+    }
+
+    class CameraxCameraCharacteristicsImpl(private val characteristics: Camera2CameraInfo) :
+        CameraCharacteristicsImpl {
+        override fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T? {
+            return characteristics.getCameraCharacteristic(key)
+        }
+    }
+
+
+    class Camera2CameraCharacteristicsImpl(private val characteristics: CameraCharacteristics) :
+        CameraCharacteristicsImpl {
+        override fun <T> getCameraCharacteristic(key: CameraCharacteristics.Key<T>): T? {
+            return characteristics.get(key)
+        }
+    }
+
+    class CameraInfo(
+        val id: String,
+        val implementationType: String,
+        characteristics: CameraCharacteristicsImpl
+    ) {
+
+        val lensFacing by lazy {
+            when (characteristics.getCameraCharacteristic(CameraCharacteristics.LENS_FACING)!!) {
+                CameraCharacteristics.LENS_FACING_BACK -> 0
+                CameraCharacteristics.LENS_FACING_FRONT -> 1
+                CameraCharacteristics.LENS_FACING_EXTERNAL -> 2
+                else -> 2
+            }
+        }
+
+
+        val capabilities by lazy {
+            characteristics.getCameraCharacteristic(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+        }
+
+
+        val focalLengths by lazy {
+            characteristics.getCameraCharacteristic(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+        }
+
+        val maxDigitalZoom by lazy {
+            characteristics.getCameraCharacteristic(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)
+                ?: 1f
+        }
+
+        val zoomRange by lazy {
+            val range = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                characteristics.getCameraCharacteristic(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE)
+            } else {
+                null
+            }
+            return@lazy range ?: Range(1f, maxDigitalZoom)
+        }
+
+        val activeSize =
+            characteristics.getCameraCharacteristic(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)!!
+
+        val minZoom by lazy { zoomRange.lower.toDouble() }
+        val maxZoom by lazy { zoomRange.upper.toDouble() }
+
+        val hardwareLevel =
+            when (characteristics.getCameraCharacteristic(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)) {
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY -> 0
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED -> 1
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL -> 1
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL -> 2
+                CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3 -> 3
+                else -> 0
+            }
+
+        override fun toString(): String {
+            return "cameraId $id\n" +
+                    "maxDigitalZoom $maxDigitalZoom\n" +
+                    "zoomRange $zoomRange\n" +
+                    "activeSize $activeSize\n" +
+                    "minZoom $minZoom\n" +
+                    "maxZoom $maxZoom\n" +
+                    "hardwareLevel $hardwareLevel"
+        }
+    }
+
+    //  private var cameraInfoCache: MutableMap<String, CameraInfo> = mutableMapOf()
     private fun initPreview() {
+
+        safeUnbindAll()
+
         val previewBuilder = Preview.Builder()
             .apply {
-                setTargetAspectRatio(
-                    when (displayRatio) {
-                        "16:9" -> AspectRatio.RATIO_16_9
-                        else -> AspectRatio.RATIO_4_3
-                    }
+                setResolutionSelector(
+                    ResolutionSelector.Builder().apply {
+                        setAspectRatioStrategy(
+                            AspectRatioStrategy(
+                                when (displayRatio) {
+                                    "16:9" -> AspectRatio.RATIO_16_9
+                                    else -> AspectRatio.RATIO_4_3
+                                }, AspectRatioStrategy.FALLBACK_RULE_AUTO
+                            )
+                        )
+                    }.build()
                 )
-            }
-        preview = previewBuilder
-            .build()
-            .also {
-                it.setSurfaceProvider(this.previewView.surfaceProvider)
+
             }
 
-
-
-        camera = if (detectorType != DetectorType.None && isMLSupported) {
-            if (imageAnalysis == null) {
-                setUpAnalysis()
-            }
-            cameraProvider?.bindToLifecycle(
-                context as LifecycleOwner,
-                selectorFromPosition(),
-                preview,
-                imageAnalysis
-            )
-        } else {
-            cameraProvider?.bindToLifecycle(
-                context as LifecycleOwner,
-                selectorFromPosition(),
-                preview
-            )
+        if (imageAnalysis == null) {
+            setUpAnalysis()
         }
-        if(pendingAutoFocus) {
+
+        if (defaultLens == CameraLens.auto) {
+            if (wideCameraInfo != null) {
+                val info = Camera2CameraInfo.from(wideCameraInfo!!)
+                val cameraInfo = CameraInfo(
+                    info.cameraId,
+                    wideCameraInfo!!.implementationType,
+                    CameraxCameraCharacteristicsImpl(info)
+                )
+
+                val builder = Preview.Builder()
+                    .apply {
+                        setResolutionSelector(
+                            ResolutionSelector.Builder().apply {
+                                setAspectRatioStrategy(
+                                    AspectRatioStrategy(
+                                        when (displayRatio) {
+                                            "16:9" -> AspectRatio.RATIO_16_9
+                                            else -> AspectRatio.RATIO_4_3
+                                        }, AspectRatioStrategy.FALLBACK_RULE_AUTO
+                                    )
+                                )
+                            }.build()
+                        )
+
+                    }
+
+                val extender = Camera2Interop.Extender(builder)
+
+                val zoomRange = cameraInfo.zoomRange
+                val zoomClamped = zoomRange.clamp(zoom)
+                if (cameraInfo.hardwareLevel >= 1 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    extender.setCaptureRequestOption(CaptureRequest.CONTROL_ZOOM_RATIO, zoomClamped)
+                } else {
+                    val size = cameraInfo.activeSize
+                    val dx = (size.width() / zoomClamped / 2).toInt()
+                    val dy = (size.height() / zoomClamped / 2).toInt()
+                    val left = size.centerX() - this.left - dx
+                    val top = size.centerY() - this.top - dy
+                    val right = size.centerX() - this.left + dx
+                    val bottom = size.centerY() - this.top + dy
+
+                    val zoomed = Rect(left, top, right, bottom)
+                    extender.setCaptureRequestOption(CaptureRequest.SCALER_CROP_REGION, zoomed)
+                }
+
+
+                preview = previewBuilder
+                    .build()
+                    .also { value ->
+                        value.setSurfaceProvider(this.previewView.surfaceProvider)
+                    }
+
+                bindDefaultUseCase()
+            } else {
+                preview = previewBuilder
+                    .build()
+                    .also {
+                        it.setSurfaceProvider(this.previewView.surfaceProvider)
+                    }
+
+                bindDefaultUseCase()
+            }
+
+        } else {
+            preview = previewBuilder
+                .build()
+                .also {
+                    it.setSurfaceProvider(this.previewView.surfaceProvider)
+                }
+
+            bindDefaultUseCase()
+        }
+
+        if (pendingAutoFocus) {
             handleAutoFocus()
         }
+
 
         listener?.onReady()
     }
@@ -1047,7 +1176,7 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    @SuppressLint("RestrictedApi")
+
     private fun initVideoCapture() {
         if (pause) {
             return
@@ -1060,7 +1189,7 @@ class Camera2 @JvmOverloads constructor(
                         getRecorderQuality(quality),
                         FallbackStrategy.lowerQualityOrHigherThan(androidx.camera.video.Quality.SD)
                     )
-                ).setExecutor(videoCaptureExecutor)
+                )
                 .build()
 
 
@@ -1072,7 +1201,9 @@ class Camera2 @JvmOverloads constructor(
         }
     }
 
-    @SuppressLint("RestrictedApi", "UnsafeOptInUsageError")
+    private var zoomRange = 1F..1F
+
+    @SuppressLint("UnsafeOptInUsageError")
     private fun refreshCamera() {
         if (pause) {
             return
@@ -1090,9 +1221,7 @@ class Camera2 @JvmOverloads constructor(
         preview?.setSurfaceProvider(null)
         preview = null
 
-        if (detectorType != DetectorType.None) {
-            setUpAnalysis()
-        }
+        setUpAnalysis()
 
         initPreview()
 
@@ -1132,7 +1261,7 @@ class Camera2 @JvmOverloads constructor(
             }
         }
 
-        updateImageCapture(true)
+        updateImageCapture(false)
 
         if (flashMode == CameraFlashMode.TORCH && camera?.cameraInfo?.hasFlashUnit() == true) {
             camera?.cameraControl?.enableTorch(true)
@@ -1165,8 +1294,10 @@ class Camera2 @JvmOverloads constructor(
                         it.cameraControl.enableTorch(false)
                         imageCapture?.flashMode = ImageCapture.FLASH_MODE_OFF
                     }
+
                     CameraFlashMode.ON, CameraFlashMode.RED_EYE -> imageCapture?.flashMode =
                         ImageCapture.FLASH_MODE_ON
+
                     CameraFlashMode.AUTO -> imageCapture?.flashMode = ImageCapture.FLASH_MODE_AUTO
                     CameraFlashMode.TORCH -> it.cameraControl.enableTorch(true)
                 }
@@ -1183,7 +1314,6 @@ class Camera2 @JvmOverloads constructor(
         return
     }
 
-    @SuppressLint("RestrictedApi")
     override fun startRecording() {
         if (!hasAudioPermission() || !hasCameraPermission()) {
             return
@@ -1216,17 +1346,11 @@ class Camera2 @JvmOverloads constructor(
                 initVideoCapture()
             }
             cameraProvider?.let {
-                if (it.isBound(imageCapture!!)) {
-                    it.unbind(imageCapture!!)
-                }
-
-                if (!it.isBound(videoCapture!!)) {
-                    it.bindToLifecycle(
-                        context as LifecycleOwner,
-                        selectorFromPosition(),
-                        videoCapture!!
-                    )
-                }
+                camera = it.bindToLifecycle(
+                    context as LifecycleOwner,
+                    selectorFromPosition(),
+                    videoCapture!!
+                )
             }
 
             val opts = FileOutputOptions.Builder(file!!).build()
@@ -1251,6 +1375,7 @@ class Camera2 @JvmOverloads constructor(
                         startDurationTimer()
                         listener?.onCameraVideoStart()
                     }
+
                     is VideoRecordEvent.Finalize -> {
                         isRecording = false
                         stopDurationTimer()
@@ -1271,6 +1396,8 @@ class Camera2 @JvmOverloads constructor(
                                 synchronized(mLock) {
                                     isForceStopping = false
                                 }
+                            } else {
+                                bindDefaultUseCase()
                             }
                         } else {
                             if (isForceStopping) {
@@ -1284,6 +1411,7 @@ class Camera2 @JvmOverloads constructor(
                                     isForceStopping = false
                                 }
                             } else {
+                                bindDefaultUseCase()
                                 if (saveToGallery && hasStoragePermission()) {
                                     val values = ContentValues().apply {
                                         put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
@@ -1350,20 +1478,12 @@ class Camera2 @JvmOverloads constructor(
             if (file != null) {
                 file!!.delete()
             }
-            cameraProvider?.let {
-                if (it.isBound(videoCapture!!)) {
-                    it.unbind(videoCapture!!)
-                }
-                if (it.isBound(imageCapture!!)) {
-                    it.unbind(imageCapture!!)
-                }
-            }
+            bindDefaultUseCase()
             isForceStopping = false
             listener?.onCameraError("Failed to record video.", e)
         }
     }
 
-    @SuppressLint("RestrictedApi")
     override fun stopRecording() {
         if (flashMode == CameraFlashMode.ON) {
             camera?.cameraControl?.enableTorch(false)
@@ -1394,11 +1514,10 @@ class Camera2 @JvmOverloads constructor(
             File(context.getExternalFilesDir(null), fileName)
         }
 
-        cameraProvider?.let { provider ->
-            videoCapture?.let { if (provider.isBound(it)) provider.unbind(it) }
 
+        cameraProvider?.let { provider ->
             if (imageCapture == null) {
-                updateImageCapture(true)
+                updateImageCapture(false)
             }
             imageCapture?.let { capture ->
                 if (!provider.isBound(capture)) {
@@ -1421,7 +1540,7 @@ class Camera2 @JvmOverloads constructor(
         val useImageProxy = autoSquareCrop || !allowExifRotation
         if (useImageProxy) {
             imageCapture?.takePicture(
-                imageCaptureExecutor,
+                executor,
                 object : ImageCapture.OnImageCapturedCallback() {
                     override fun onCaptureSuccess(image: ImageProxy) {
                         processImageProxy(image, fileName)
@@ -1439,7 +1558,7 @@ class Camera2 @JvmOverloads constructor(
             options.setMetadata(meta)
             imageCapture?.takePicture(
                 options.build(),
-                imageCaptureExecutor,
+                executor,
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                         processImageFile(fileName) // outputFileResults.savedUri.toString() is null
@@ -1447,6 +1566,15 @@ class Camera2 @JvmOverloads constructor(
 
                     override fun onError(exception: ImageCaptureException) {
                         listener?.onCameraError("Failed to take photo image", exception)
+                        ContextCompat.getMainExecutor(context).execute {
+                            cameraProvider?.unbind(imageCapture)
+                            cameraProvider?.bindToLifecycle(
+                                context as LifecycleOwner,
+                                selectorFromPosition(),
+                                preview,
+                                imageAnalysis
+                            )
+                        }
                     }
                 })
         }
@@ -1456,91 +1584,154 @@ class Camera2 @JvmOverloads constructor(
         var isError = false
         var outputStream: FileOutputStream? = null
         try {
-            val meta = ImageCapture.Metadata().apply {
-                isReversedHorizontal = position == CameraPosition.FRONT
-            }
 
-            val buffer = image.planes.first().buffer
-            val bytes = ByteArray(buffer.remaining())
-            buffer.get(bytes)
+            val buffer: ByteBuffer = image.planes[0].buffer
+            buffer.rewind()
+            val data = ByteArray(buffer.capacity())
+            buffer.get(data)
+            buffer.rewind()
+            val inputStream: InputStream = ByteArrayInputStream(data)
+            val srcExif = ExifInterface(inputStream)
 
-            val bm = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            val matrix = Matrix()
-
-            // Registering image's required rotation, provided by Androidx ImageAnalysis
-            val imageTargetRotation = image.imageInfo.rotationDegrees
-            matrix.postRotate(imageTargetRotation.toFloat())
-
-            // Flipping over the image in case it is the front camera
-            if (position == CameraPosition.FRONT)
-                matrix.postScale(-1f, 1f)
-
+            var bm = image.toBitmap()
             var originalWidth = bm.width
             var originalHeight = bm.height
             var offsetWidth = 0
             var offsetHeight = 0
+            var matrix: Matrix? = null
+
+            if (!allowExifRotation) {
+                matrix = Matrix()
+                // Registering image's required rotation, provided by Androidx ImageAnalysis
+                val imageTargetRotation = image.imageInfo.rotationDegrees
+                matrix.postRotate(imageTargetRotation.toFloat())
+
+                // Flipping over the image in case it is the front camera
+                if (position == CameraPosition.FRONT)
+                    matrix.postScale(-1f, 1f)
+            }
+
             if (autoSquareCrop) {
                 if (originalWidth < originalHeight) {
-                    offsetHeight = (originalHeight - originalWidth) / 2;
-                    originalHeight = originalWidth;
+                    offsetHeight = (originalHeight - originalWidth) / 2
+                    originalHeight = originalWidth
                 } else {
-                    offsetWidth = (originalWidth - originalHeight) / 2;
-                    originalWidth = originalHeight;
+                    offsetWidth = (originalWidth - originalHeight) / 2
+                    originalWidth = originalHeight
                 }
             }
-            val rotated = Bitmap.createBitmap(
-                bm,
-                offsetWidth,
-                offsetHeight,
-                originalWidth,
-                originalHeight,
-                matrix,
-                false
-            )
+
+            if (autoSquareCrop || !allowExifRotation) {
+                bm = Bitmap.createBitmap(
+                    bm,
+                    offsetWidth,
+                    offsetHeight,
+                    originalWidth,
+                    originalHeight,
+                    matrix,
+                    false
+                )
+            }
+
             outputStream = FileOutputStream(file!!, false)
             var override: Bitmap? = null
             if (overridePhotoHeight > 0 && overridePhotoWidth > 0) {
                 override = Bitmap.createScaledBitmap(
-                    rotated,
+                    bm,
                     overridePhotoWidth,
                     overridePhotoHeight,
                     false
                 )
-                override.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+                override.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             } else {
-                rotated.compress(Bitmap.CompressFormat.JPEG, 92, outputStream)
+                bm.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
             }
 
-
-            val exif = ExifInterface(file!!.absolutePath)
+            val dstExif = ExifInterface(file!!.absolutePath)
 
             val now = System.currentTimeMillis()
             val datetime = convertToExifDateTime(now)
 
-            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
-            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
+            dstExif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, datetime)
+            dstExif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, datetime)
 
             try {
                 val subsec = (now - convertFromExifDateTime(datetime).time).toString()
-                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
-                exif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
+                dstExif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, subsec)
+                dstExif.setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, subsec)
             } catch (_: ParseException) {
             }
 
-            exif.rotate(image.imageInfo.rotationDegrees)
-            if (meta.isReversedHorizontal) {
-                exif.flipHorizontally()
+            if (allowExifRotation) {
+                val exifOrientation = srcExif.getAttribute(ExifInterface.TAG_ORIENTATION)
+
+                dstExif.setAttribute(ExifInterface.TAG_ORIENTATION, exifOrientation)
             }
-            if (meta.isReversedVertical) {
-                exif.flipVertically()
+
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_APERTURE_VALUE,
+                srcExif.getAttribute(ExifInterface.TAG_APERTURE_VALUE)
+            )
+
+
+            val aperture = srcExif.getAttribute(ExifInterface.TAG_F_NUMBER)
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_F_NUMBER,
+                aperture
+            )
+
+            val exposureTime = srcExif.getAttribute(ExifInterface.TAG_EXPOSURE_TIME)
+
+            dstExif.setAttribute(
+                ExifInterface.TAG_EXPOSURE_TIME,
+                exposureTime
+            )
+
+            srcExif.getAttribute(ExifInterface.TAG_ISO_SPEED_RATINGS)?.let { isoSpeed ->
+                dstExif.setAttribute(
+                    ExifInterface.TAG_ISO_SPEED_RATINGS,
+                    isoSpeed
+                )
             }
-            if (meta.location != null) {
-                exif.setGpsInfo(meta.location!!)
+
+
+            srcExif.getAttribute(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY)
+                ?.let { photographicSensitivity ->
+                    dstExif.setAttribute(
+                        ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY,
+                        photographicSensitivity
+                    )
+                }
+
+
+            val make = srcExif.getAttribute(ExifInterface.TAG_MAKE)
+            dstExif.setAttribute(ExifInterface.TAG_MAKE, make)
+
+            val model = srcExif.getAttribute(ExifInterface.TAG_MODEL)
+            dstExif.setAttribute(ExifInterface.TAG_MODEL, model)
+
+            val lensModel = srcExif.getAttribute(ExifInterface.TAG_LENS_MODEL)
+            dstExif.setAttribute(ExifInterface.TAG_LENS_MODEL, lensModel)
+
+            val softwareVersion = srcExif.getAttribute(ExifInterface.TAG_SOFTWARE)
+            dstExif.setAttribute(ExifInterface.TAG_SOFTWARE, softwareVersion)
+
+            val focalLength = srcExif.getAttribute(ExifInterface.TAG_FOCAL_LENGTH)
+            dstExif.setAttribute(ExifInterface.TAG_FOCAL_LENGTH, focalLength)
+
+            try {
+                Exif.createFromImageProxy(image).location?.let {
+                    dstExif.setGpsInfo(it)
+                }
+            } catch (_: IOException) {
             }
-            exif.saveAttributes()
+
+            dstExif.saveAttributes()
+
 
             bm.recycle()
-            rotated.recycle()
             override?.recycle()
         } catch (e: Exception) {
             isError = true
@@ -1556,6 +1747,9 @@ class Camera2 @JvmOverloads constructor(
             } catch (_: Exception) {
 
             }
+
+
+            bindDefaultUseCase()
             if (!isError) {
                 if (saveToGallery && hasStoragePermission()) {
                     val values = ContentValues().apply {
@@ -1590,9 +1784,9 @@ class Camera2 @JvmOverloads constructor(
                             }
                         }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { //this one
-                            values.clear();
-                            values.put(MediaStore.Images.Media.IS_PENDING, 0);
-                            context.contentResolver.update(uri, values, null, null);
+                            values.clear()
+                            values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                            context.contentResolver.update(uri, values, null, null)
                         }
                         listener?.onCameraPhoto(file)
                     }
@@ -1600,8 +1794,9 @@ class Camera2 @JvmOverloads constructor(
                 } else {
                     listener?.onCameraPhoto(file)
                 }
-
             }
+
+
         }
     }
 

@@ -13,8 +13,8 @@ import android.widget.RelativeLayout
 import android.widget.TextView
 import android.widget.VideoView
 import io.github.triniwiz.fancycamera.*
-import org.json.JSONArray
-import org.json.JSONObject
+import io.github.triniwiz.fancycamera.barcodescanning.BarcodeScanner
+import io.github.triniwiz.fancycamera.textrecognition.TextRecognition
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -23,6 +23,8 @@ import java.util.*
 
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.collections.ArrayList
+import kotlin.math.pow
 
 class MainActivity : AppCompatActivity() {
     internal lateinit var container: RelativeLayout
@@ -37,15 +39,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-       // FancyCamera.forceV1 = true
+//        FancyCamera.forceV1 = true
         setContentView(R.layout.activity_main)
         videoPlayer = findViewById(R.id.videoPlayer)
         durationView = findViewById(R.id.durationView)
         container = findViewById(R.id.container)
         cameraView = FancyCamera(this)
-       // cameraView.ratio = "16:9"
+//        cameraView.ratio = "16:9"
+//        cameraView.ratio = "16:9"
         cameraView.autoFocus = true
         cameraView.position = CameraPosition.BACK
+        cameraView.processEveryNthFrame = 9
+        cameraView.defaultLens = CameraLens.auto
         cameraView.setListener(object : CameraEventListenerUI() {
             override fun onReadyUI() {
             }
@@ -100,7 +105,14 @@ class MainActivity : AppCompatActivity() {
             }
 
         })
-        cameraView.detectorType = DetectorType.All // disable to use recorder
+
+//        cameraView.addImageProcessor(
+//            BarcodeScanner()
+//        )
+//        cameraView.addImageProcessor(
+//            TextRecognition()
+//        )
+
         cameraView.setOnBarcodeScanningListener(object : ImageAnalysisCallback {
             override fun onSuccess(result: Any) {
                 println("setOnBarcodeScanningListener: Success $result")
@@ -173,7 +185,7 @@ class MainActivity : AppCompatActivity() {
         })
         cameraView.saveToGallery = true
         container.addView(cameraView)
-      //  processBarcodeBitmap()
+        //  processBarcodeBitmap()
 
     }
 
@@ -197,16 +209,11 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val bm = BitmapFactory.decodeFile(barcodeFile.absolutePath)
-                val json = JSONObject()
-                json.put("detectorType", 0)
-                val barcode = JSONObject()
-                val formats = JSONArray()
-                formats.put(0)
-                barcode.put("barcodeFormat", formats)
-                json.put("barcodeScanning", barcode)
-                ML.processImage(bm, 0, json.toString(), object : ImageAnalysisCallback {
+                val processors = ArrayList<ImageProcessor<Any>>(1)
+                processors.add(BarcodeScanner() as ImageProcessor<Any>)
+                ML.processImage(bm, 0, processors, object : ImageAnalysisCallback {
                     override fun onSuccess(result: Any) {
-                        (result as? List<Array<Any>>)?.let { values ->
+                        (result as? List<Array<*>>)?.let { values ->
                             for (value in values) {
                                 val type = value[0]
                                 val data = value[1]
@@ -224,8 +231,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startRecording(view: View) {
-        cameraView.quality = Quality.HIGHEST
-        cameraView.startRecording()
+//        cameraView.quality = Quality.HIGHEST
+//        cameraView.startRecording()
+
+        cameraView.takePhoto()
 
     }
 
@@ -267,6 +276,7 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         cameraView.stopPreview()
         cameraView.stop()
+        cameraView.release()
         super.onPause()
         if (levelsTask != null) {
             levelsTask!!.cancel()
@@ -304,8 +314,7 @@ class MainActivity : AppCompatActivity() {
                 levelsTask!!.scheduleAtFixedRate(object : TimerTask() {
                     override fun run() {
                         runOnUiThread {
-                            level = Math.pow(10.0, 0.02 * cameraView.db)
-                            Log.d("co.test", "Audio Levels$level")
+                            level = 10.0.pow(0.02 * cameraView.db)
                         }
                     }
                 }, 0, 1000)

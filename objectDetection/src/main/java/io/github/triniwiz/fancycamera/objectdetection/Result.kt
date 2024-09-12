@@ -1,6 +1,7 @@
 package io.github.triniwiz.fancycamera.objectdetection
 
 import android.graphics.Rect
+import com.google.gson.annotations.SerializedName
 import com.google.mlkit.vision.objects.DetectedObject
 import com.google.mlkit.vision.objects.defaults.PredefinedCategory
 
@@ -44,31 +45,54 @@ class Result(detectedObject: DetectedObject) {
         }
 
         enum class Category(val category: String) {
+            @SerializedName("unknown")
             Unknown("unknown"),
+
+            @SerializedName("homeGood")
             HomeGood("homeGood"),
+
+            @SerializedName("fashionGood")
             FashionGood("fashionGood"),
+
+            @SerializedName("food")
             Food("food"),
+
+            @SerializedName("place")
             Place("place"),
+
+            @SerializedName("plant")
             Plant("plant")
         }
 
         enum class Index(val index: String) {
+            @SerializedName("unknownIndex")
             UnknownIndex("unknownIndex"),
+
+            @SerializedName("homeGoodIndex")
             HomeGoodIndex("homeGoodIndex"),
+
+            @SerializedName("fashionGoodIndex")
             FashionGoodIndex("fashionGoodIndex"),
+
+            @SerializedName("foodIndex")
             FoodIndex("foodIndex"),
+
+            @SerializedName("placeIndex")
             PlaceIndex("placeIndex"),
+
+            @SerializedName("plantIndex")
             PlantIndex("plantIndex")
         }
 
     }
 
     class Bounds(rect: Rect) {
-        class Origin(val x: Int, val y: Int)
-        class Size(val width: Int,
-                   val height: Int)
+        val x: Int = rect.left
 
-        val origin = Origin(rect.left, rect.top)
-        val size = Size(rect.width(), rect.height())
+        val y: Int = rect.top
+
+        val width: Int = rect.width()
+
+        val height: Int = rect.height()
     }
 }
