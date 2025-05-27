@@ -42,7 +42,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-
+import android.util.Size
 
 @SuppressLint("UnsafeOptInUsageError")
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
@@ -187,7 +187,9 @@ class Camera2 @JvmOverloads constructor(
         }
         set(value) {
             val size = stringSizeToSize(value)
-            if (cachedPictureRatioSizeMap[displayRatio]?.contains(size) == true) {
+            if (cachedPictureRatioSizeMap[displayRatio]?.contains(android.util.Size(size.width, size.height)) == true) {
+                field = value
+            } else {
                 field = value
             }
         }
@@ -1674,8 +1676,10 @@ class Camera2 @JvmOverloads constructor(
         return cachedPreviewRatioSizeMap.keys.toTypedArray()
     }
 
-    override fun getAvailablePictureSizes(ratio: String): Array<Size> {
-        return cachedPictureRatioSizeMap[ratio]?.toTypedArray() ?: arrayOf()
+    override fun getAvailablePictureSizes(ratio: String): Array<io.github.triniwiz.fancycamera.Size> {
+        return cachedPictureRatioSizeMap[ratio]?.map { 
+            io.github.triniwiz.fancycamera.Size(it.width, it.height)
+        }?.toTypedArray() ?: arrayOf()
     }
 
     override fun stop() {
@@ -1709,4 +1713,15 @@ class Camera2 @JvmOverloads constructor(
         }
         deInitListener()
     }
+
+ override fun setPreviewSize(width: Int, height: Int) {
+        val size = Size(width, height)
+        imageAnalysis = androidx.camera.core.ImageAnalysis.Builder()
+            .setTargetResolution(size)
+            .build()
+   preview = androidx.camera.core.Preview.Builder()
+        .setTargetResolution(size)
+        .build()
+    }
 }
+

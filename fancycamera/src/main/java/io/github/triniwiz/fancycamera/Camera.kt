@@ -1465,5 +1465,14 @@ class Camera @JvmOverloads constructor(
 
         }
     }
+    override fun setPreviewSize(width: Int, height: Int) {
+    synchronized(lock) {
+        camera?.let {
+            val params = it.parameters
+            params.setPreviewSize(width, height)
+            it.parameters = params
+        }
+    }
+}
 
 }
