@@ -461,7 +461,9 @@ class FancyCamera : FrameLayout {
     fun getAvailablePictureSizes(ratio: String): Array<Size> {
         return cameraView.getAvailablePictureSizes(ratio)
     }
-
+    fun setCameraResolution(width: Int, height: Int) {
+        (cameraView as? Camera)?.setPreviewSize(width, height)
+    }
     companion object {
         @JvmStatic
         var forceV1 = false
